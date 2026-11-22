@@ -47,6 +47,11 @@ QTabBar::tab { background: #ebe5dc; padding: 7px 16px; border-top-left-radius: 8
 QTabBar::tab:selected { background: #3a342e; color: white; }
 QTableWidget { background: white; border: 1px solid #e4ddd3; border-radius: 8px; gridline-color: #eee; }
 QHeaderView::section { background: #3a342e; color: white; padding: 6px; border: none; font-weight: 600; }
+QToolTip { background: #fffaf3; color: #2b2722; border: 1px solid #d6cdc1; border-radius: 6px; padding: 5px 8px; }
+QSlider::groove:horizontal { height: 6px; background: #ebe5dc; border-radius: 3px; }
+QSlider::sub-page:horizontal { background: #b5652b; border-radius: 3px; }
+QSlider::handle:horizontal { background: #ffffff; border: 2px solid #b5652b; width: 14px; height: 14px; margin: -6px 0; border-radius: 9px; }
+QSlider::add-page:horizontal { background: #ebe5dc; border-radius: 3px; }
 """
 
 
@@ -290,9 +295,24 @@ class HomePage(QWidget):
         og.addWidget(self.voice, 4, 1)
         self.rate = QSlider(Qt.Horizontal)
         self.rate.setRange(-5, 5)
-        self.rate.setValue(1)
-        self.rate.setToolTip("Velocidad de la voz")
-        og.addWidget(self.rate, 4, 2)
+        self.rate.setValue(0)
+        self.rate.setMinimumWidth(200)
+        self.rate.setTickPosition(QSlider.TicksBelow)
+        self.rate.setTickInterval(1)
+        self.rate.setPageStep(1)
+        self.rate_lbl = label("", size=12, bold=True)
+        self.rate_lbl.setAlignment(Qt.AlignCenter)
+        self.rate.valueChanged.connect(self._rate_text)
+        rate_col = QVBoxLayout()
+        rate_col.setSpacing(2)
+        rate_col.addWidget(self.rate_lbl)
+        rate_row = QHBoxLayout()
+        rate_row.addWidget(label("Lenta", "muted"))
+        rate_row.addWidget(self.rate, 1)
+        rate_row.addWidget(label("Rápida", "muted"))
+        rate_col.addLayout(rate_row)
+        og.addLayout(rate_col, 4, 2)
+        self._rate_text(self.rate.value())
         og.setColumnStretch(1, 1)
         mid.addWidget(opts)
 
@@ -321,6 +341,14 @@ class HomePage(QWidget):
 
         self.prof_group = QButtonGroup(self)
         self.prof_group.buttonToggled.connect(lambda *_: self._refresh_info())
+
+    RATE_TEXT = {-5: "Muy lenta", -4: "Bastante lenta", -3: "Lenta", -2: "Un poco lenta", -1: "Algo más lenta de lo normal",
+                 0: "Velocidad normal", 1: "Un poco más rápida de lo normal", 2: "Algo rápida", 3: "Rápida",
+                 4: "Bastante rápida", 5: "Muy rápida"}
+
+    def _rate_text(self, v):
+        self.rate_lbl.setText(self.RATE_TEXT.get(v, ""))
+        self.rate_lbl.setStyleSheet("font-size:12px;font-weight:700;color:" + ("#2f7d4f" if v == 0 else "#b5652b"))
 
     # perfiles
     def set_deck(self, deck, last_profile=None):
@@ -823,6 +851,7 @@ class MainWindow(QMainWindow):
         self.home.voice.addItems(self.voices.names() or (["(voz por defecto)"] if self.voices.ok else ["(no hay voces instaladas)"]))
         self.home.voice.setCurrentIndex(min(self.settings.get("voice", 0), max(0, self.home.voice.count() - 1)))
         self.home.auto.setChecked(self.settings.get("auto", True))
+        self.home.rate.setValue(int(self.settings.get("rate", 0)))
         self.home.show_script.setChecked(self.settings.get("show_script", True))
 
         devs = audio.list_input_devices()
@@ -912,7 +941,8 @@ class MainWindow(QMainWindow):
     def start(self):
         prof = self.home.profile()
         storage.save_settings(profile=prof or TEAM_PROFILE, auto=self.home.auto.isChecked(),
-                              show_script=self.home.show_script.isChecked(), voice=self.home.voice.currentIndex())
+                              show_script=self.home.show_script.isChecked(), voice=self.home.voice.currentIndex(),
+                              rate=self.home.rate.value())
         self.settings = storage.settings()
         reh = Rehearsal(self.deck, mode=self.home.mode(), profile=prof, auto_advance=self.home.auto.isChecked())
         self.stack.setCurrentWidget(self.sess)
