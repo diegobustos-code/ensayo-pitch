@@ -4,14 +4,14 @@ import sys
 import time
 
 from PySide6.QtCore import QLocale, Qt, QTimer, QUrl, Signal
-from PySide6.QtGui import QColor, QDesktopServices, QFont, QKeySequence, QPainter, QPixmap, QShortcut
+from PySide6.QtGui import QColor, QDesktopServices, QFont, QIcon, QKeySequence, QPainter, QPixmap, QShortcut
 from PySide6.QtWidgets import (QApplication, QButtonGroup, QCheckBox, QComboBox, QFileDialog, QFrame, QGridLayout,
                                QHBoxLayout, QHeaderView, QLabel, QMainWindow, QMessageBox, QProgressBar, QPushButton,
                                QScrollArea, QSizePolicy, QSlider, QStackedWidget, QTableWidget, QTabWidget, QTableWidgetItem,
                                QTextEdit, QVBoxLayout, QWidget)
 
 from . import audio, report, storage
-from .deck import load_deck
+from .deck import asset_dir, load_deck
 from .session import SOLO, TEAM, TOTAL_MAX, TOTAL_MIN, Rehearsal, diff_label, fmt
 
 APP_NAME = "Ensayo Pitch"
@@ -1006,8 +1006,17 @@ def selftest(out_path):
 def main():
     if len(sys.argv) >= 3 and sys.argv[1] == "--selftest":
         sys.exit(selftest(sys.argv[2]))
+    if sys.platform == "win32":
+        try:  # para que la barra de tareas muestre el ícono de la app y no el de Python
+            import ctypes
+            ctypes.windll.shell32.SetCurrentProcessExplicitAppUserModelID("FireProof.EnsayoPitch")
+        except Exception:
+            pass
     app = QApplication(sys.argv)
     app.setApplicationName(APP_NAME)
+    icon = os.path.join(asset_dir(), "icon.ico" if sys.platform == "win32" else "icon.png")
+    if os.path.exists(icon):
+        app.setWindowIcon(QIcon(icon))
     app.setStyleSheet(QSS)
     w = MainWindow()
     w.show()

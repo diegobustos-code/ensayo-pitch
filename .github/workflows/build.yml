@@ -39,6 +39,7 @@ jobs:
       - name: Empaquetar con PyInstaller
         run: >
           pyinstaller --noconfirm --windowed --name EnsayoPitch
+          --icon ensayo/assets/icon.ico
           --add-data "ensayo/assets;assets"
           --add-data "model;model"
           --collect-all vosk
