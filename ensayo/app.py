@@ -251,7 +251,7 @@ class HomePage(QWidget):
         top.addLayout(tl)
         top.addStretch()
         for txt, tip, fn in (
-                ("Presentación…", "Cargar un PowerPoint (.pptx). Si las notas traen el guion, basta con eso.", self._pick_deck),
+                ("Presentación…", "Cargar la presentación en PowerPoint (.pptx) o en PDF. Con el PDF se ven las láminas tal cual, sin necesitar PowerPoint.", self._pick_deck),
                 ("Guion…", "Cargar el guion en la plantilla de Word (.docx) o de texto (.txt).", self._pick_guion),
                 ("Plantilla del guion…", "Guardar la plantilla para escribir el guion de otra presentación.", self._save_template),
                 ("Pitch del equipo", "Volver al pitch del BioBloque.", lambda: self.reset_team.emit())):
@@ -459,7 +459,8 @@ class HomePage(QWidget):
             self.info.setText("".join(parts))
 
     def _pick_deck(self):
-        path, _ = QFileDialog.getOpenFileName(self, "Elegir presentación", "", "PowerPoint (*.pptx)")
+        path, _ = QFileDialog.getOpenFileName(self, "Elegir presentación", "",
+                                              "Presentación (*.pptx *.pdf);;PowerPoint (*.pptx);;PDF (*.pdf)")
         if path:
             self.pick_pptx.emit(path)
 
@@ -952,8 +953,14 @@ class MainWindow(QMainWindow):
 
     # presentación
     def on_pick_pptx(self, path):
+        from .deck import is_pdf
         guion = ""
         cur = getattr(self, "deck", None)
+        if is_pdf(path) and not (cur is not None and cur.guion):
+            self._pending_pres = path
+            QMessageBox.information(self, APP_NAME, "Listo, guardé el PDF para mostrar las láminas.\n\n"
+                                    "Un PDF no trae el texto de cada persona, así que ahora carga el guion con «Guion…».")
+            return
         if cur is not None and cur.guion:
             box = QMessageBox(QMessageBox.Question, APP_NAME,
                               f"¿Usar el guion que ya cargaste ({os.path.basename(cur.guion)}) con esta presentación?\n\n"
@@ -969,6 +976,10 @@ class MainWindow(QMainWindow):
     def on_pick_guion(self, path):
         cur = getattr(self, "deck", None)
         pptx = cur.path if cur is not None and not cur.is_default and cur.path else ""
+        pending = getattr(self, "_pending_pres", "")
+        if pending and os.path.exists(pending):
+            pptx = pending
+        self._pending_pres = ""
         self.load_material(pptx, path)
 
     def load_material(self, pptx, guion, quiet=False):
@@ -1101,6 +1112,23 @@ def selftest(out_path):
     except Exception as e:
         res["portaudio"] = f"ERROR {e}"
     app = QApplication.instance() or QApplication(sys.argv)
+    try:
+        import tempfile
+        from PySide6.QtGui import QPageSize, QPainter, QPdfWriter
+        from .deck import render_pdf
+        tmp = tempfile.mkdtemp()
+        pdf = os.path.join(tmp, "prueba.pdf")
+        wr = QPdfWriter(pdf)
+        wr.setPageSize(QPageSize(QPageSize.A5))
+        p = QPainter(wr)
+        p.drawText(100, 100, "Lámina de prueba")
+        wr.newPage()
+        p.drawText(100, 100, "Segunda lámina")
+        p.end()
+        imgs = render_pdf(pdf, tmp)
+        res["pdf"] = "ok" if len(imgs) == 2 and all(os.path.exists(i) for i in imgs) else f"ERROR {len(imgs)} páginas"
+    except Exception as e:
+        res["pdf"] = f"ERROR {e}"
     v = Voices()
     res["tts"] = {"ok": v.ok, "voices": v.names()}
     with open(out_path, "w", encoding="utf-8") as f:

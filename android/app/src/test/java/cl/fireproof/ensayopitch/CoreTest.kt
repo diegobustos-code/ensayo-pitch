@@ -153,3 +153,15 @@ class TurnosTest {
         assertEquals("4 turnos", d.turnLabel("Diego Bustos"))
     }
 }
+
+class SlideContentTest {
+    @Test fun contenidoDeLaminas() {
+        val f = listOf("../../ensayo/assets/default.pptx", "../ensayo/assets/default.pptx").map { File(it) }.first { it.exists() }
+        val c = SlideImages.contents(f.readBytes())
+        assertEquals(14, c.size)
+        assertTrue(c.values.count { it.picture != null } >= 8)
+        assertTrue(c[3]!!.title.isNotEmpty())
+        assertTrue(SlideImages.isPdf("%PDF-1.7 x".toByteArray()))
+        assertFalse(SlideImages.isPdf(f.readBytes()))
+    }
+}

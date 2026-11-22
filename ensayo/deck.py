@@ -271,6 +271,55 @@ def compose_slide_images(slides, outdir):
     return out
 
 
+def is_pdf(path: str) -> bool:
+    try:
+        with open(path, "rb") as f:
+            return f.read(5) == b"%PDF-"
+    except OSError:
+        return False
+
+
+def render_pdf(path: str, cache_dir: Optional[str] = None):
+    """Una imagen por página del PDF (las láminas tal cual), con QtPdf. No necesita PowerPoint."""
+    global LAST_RENDER_NOTE
+    cache_dir = cache_dir or os.path.join(tempfile.gettempdir(), "EnsayoPitch")
+    outdir = os.path.join(cache_dir, "laminas", "pdf-" + file_hash(path))
+    if os.path.isdir(outdir):
+        found = sorted(f for f in os.listdir(outdir) if re.match(r"p-\d+\.jpg$", f))
+        if found:
+            return [os.path.join(outdir, f) for f in found]
+    try:
+        from PySide6.QtCore import QSize
+        from PySide6.QtGui import QColor, QImage, QPainter
+        from PySide6.QtPdf import QPdfDocument
+    except Exception as e:
+        LAST_RENDER_NOTE = f"no pude abrir el PDF ({e})"
+        return []
+    doc = QPdfDocument()
+    doc.load(path)
+    n = doc.pageCount()
+    if n <= 0:
+        LAST_RENDER_NOTE = "el PDF no tiene páginas o está protegido"
+        return []
+    os.makedirs(outdir, exist_ok=True)
+    out = []
+    for i in range(n):
+        pt = doc.pagePointSize(i)
+        w = 1280
+        h = max(1, int(round(w * pt.height() / pt.width()))) if pt.width() > 0 else 720
+        img = doc.render(i, QSize(w, h))
+        bg = QImage(img.size(), QImage.Format_RGB32)
+        bg.fill(QColor("#ffffff"))
+        p = QPainter(bg)
+        p.drawImage(0, 0, img)
+        p.end()
+        fp = os.path.join(outdir, f"p-{i + 1:03d}.jpg")
+        bg.save(fp, "JPG", 90)
+        out.append(fp)
+    doc.close()
+    return out
+
+
 def _slide_images(path, slides, is_default, cache_dir, render):
     global LAST_RENDER_NOTE
     LAST_RENDER_NOTE = ""
@@ -304,6 +353,9 @@ def load_deck(path: Optional[str] = None, cache_dir: Optional[str] = None, rende
 
     if guion_path:
         return _load_with_guion(path, guion_path, cache_dir, render)
+    if path and is_pdf(path):
+        raise ValueError("Un PDF no trae las notas del orador. Carga también el guion (botón «Guion…») "
+                         "y el PDF se usará para mostrar las láminas.")
     path = path or default_deck_path()
     prs = Presentation(path)
     slides = list(prs.slides)
@@ -337,12 +389,16 @@ def _load_with_guion(pptx_path, guion_path, cache_dir, render) -> Deck:
 
     entries = guion.load(guion_path)
     titles, images = {}, {}
-    if pptx_path:
+    if pptx_path and is_pdf(pptx_path):
+        for i, img in enumerate(render_pdf(pptx_path, cache_dir) if render else [], start=1):
+            images[i] = img
+    elif pptx_path:
         from pptx import Presentation
         slides = list(Presentation(pptx_path).slides)
         for i, sl in enumerate(slides, start=1):
             titles[i] = _slide_title(sl)
-        for i, img in enumerate(_slide_images(pptx_path, slides, False, cache_dir, render), start=1):
+        same_as_team = os.path.exists(default_deck_path()) and file_hash(pptx_path) == file_hash(default_deck_path())
+        for i, img in enumerate(_slide_images(pptx_path, slides, same_as_team, cache_dir, render), start=1):
             images[i] = img
     sections = []
     for e in entries:

@@ -259,7 +259,10 @@ class MainActivity : Activity(), AudioListener {
     private fun bitmap(path: String?): Bitmap? {
         if (path == null) return null
         return bitmaps.getOrPut(path) {
-            try { assets.open(path).use { BitmapFactory.decodeStream(it) } } catch (_: Exception) { null }
+            try {
+                if (path.startsWith("/")) BitmapFactory.decodeFile(path)
+                else assets.open(path).use { BitmapFactory.decodeStream(it) }
+            } catch (_: Exception) { null }
         }
     }
 
@@ -272,11 +275,20 @@ class MainActivity : Activity(), AudioListener {
         val hasP = store.getBool("has_pptx", false) && pptxFile.exists()
         val hasG = store.getBool("has_guion", false) && guionFile.exists()
         try {
-            deck = when {
-                hasG -> DeckParser.loadWithGuion(GuionParser.parse(guionFile.readBytes()),
-                    store.getString("guion_name", "guion") ?: "guion", if (hasP) pptxFile.readBytes() else null)
-                hasP -> DeckParser.load(pptxFile.readBytes(), store.getString("pptx_name", "presentación") ?: "presentación", false)
-                else -> loadTeamDeck()
+            val pres = if (hasP) pptxFile.readBytes() else null
+            val pdf = pres != null && SlideImages.isPdf(pres)
+            if (pdf && !hasG) {
+                // un PDF no trae notas: se queda guardado hasta que carguen el guion
+                if (!quiet) Toast.makeText(this, "Guardé el PDF para mostrar las láminas. Ahora carga el guion con «Guion…».", Toast.LENGTH_LONG).show()
+                deck = loadTeamDeck()
+            } else {
+                val base = when {
+                    hasG -> DeckParser.loadWithGuion(GuionParser.parse(guionFile.readBytes()),
+                        store.getString("guion_name", "guion") ?: "guion", if (pdf) null else pres)
+                    pres != null -> DeckParser.load(pres, store.getString("pptx_name", "presentación") ?: "presentación", false)
+                    else -> loadTeamDeck()
+                }
+                deck = if (pres != null) withImages(base, pres, pdf) else base
             }
         } catch (e: Exception) {
             if (!quiet) Toast.makeText(this, "No pude leer ${if (hasG) "el guion" else "la presentación"}: ${e.message}", Toast.LENGTH_LONG).show()
@@ -287,6 +299,26 @@ class MainActivity : Activity(), AudioListener {
         colors.clear()
         deck.speakers.forEach { colorFor(it) }
         if (profile != null && profile !in deck.speakers) profile = null
+    }
+
+    /** Pone las imágenes de las láminas: PDF tal cual, la presentación del equipo, o una vista simple. */
+    private fun withImages(d: Deck, pres: ByteArray, pdf: Boolean): Deck {
+        val hash = DeckParser.sha1(pres)
+        val imgs: Map<Int, String> = try {
+            when {
+                pdf -> SlideImages.fromPdf(this, pptxFile, hash)
+                hash == DeckParser.sha1(assets.open("default.pptx").use { it.readBytes() }) -> {
+                    val slides = (assets.list("slides") ?: emptyArray()).toSet()
+                    d.sections.associate { it.slideNo to "s-%02d.jpg".format(it.slideNo) }
+                        .filterValues { it in slides }.mapValues { "slides/${it.value}" }
+                }
+                else -> SlideImages.simple(this, pres, hash)
+            }
+        } catch (e: Exception) {
+            emptyMap()
+        }
+        bitmaps.clear()
+        return Deck(d.name, d.sections.map { it.copy(image = imgs[it.slideNo] ?: it.image) }, d.isDefault)
     }
 
     private fun loadTeamDeck(): Deck {
@@ -321,17 +353,26 @@ class MainActivity : Activity(), AudioListener {
                     val bytes = contentResolver.openInputStream(uri)!!.use { it.readBytes() }
                     val name = displayName(uri)
                     val hasG = store.getBool("has_guion", false) && guionFile.exists()
+                    val pdf = SlideImages.isPdf(bytes)
                     fun usePptx(keepGuion: Boolean) {
-                        if (!keepGuion) DeckParser.load(bytes, name, false) // revisa que traiga notas
+                        if (!keepGuion && !pdf) DeckParser.load(bytes, name, false) // revisa que traiga notas
                         pptxFile.writeBytes(bytes)
                         store.put("has_pptx", true)
                         store.put("pptx_name", name)
                         store.put("has_guion", keepGuion)
                         loadMaterial()
-                        Toast.makeText(this, "Presentación cargada. En el teléfono se muestra el título de cada lámina en vez de la imagen.", Toast.LENGTH_LONG).show()
+                        val team = !pdf && DeckParser.sha1(bytes) == DeckParser.sha1(assets.open("default.pptx").use { it.readBytes() })
+                        val msg = when {
+                            pdf && !keepGuion -> null // loadMaterial ya pidió el guion
+                            pdf -> "Listo: se verán las láminas del PDF tal cual."
+                            team -> "Es la presentación del equipo: se ven sus láminas."
+                            else -> "Listo. El teléfono no puede abrir PowerPoint, así que muestra una vista simple de cada lámina. Para verlas tal cual, carga la presentación en PDF."
+                        }
+                        if (msg != null) Toast.makeText(this, msg, Toast.LENGTH_LONG).show()
                         showHome()
                     }
-                    if (hasG) {
+                    if (hasG && pdf) usePptx(true)
+                    else if (hasG) {
                         AlertDialog.Builder(this)
                             .setTitle("¿Usar el guion que ya cargaste?")
                             .setMessage("Guion: ${store.getString("guion_name", "")}\n\nSí: el guion pone el texto y los tiempos, y la presentación los títulos.\nNo: se leen las notas del orador de la presentación.")
@@ -378,7 +419,7 @@ class MainActivity : Activity(), AudioListener {
     }
 
     private fun pickDeck() = openDoc(PICK_PPTX, arrayOf(
-        "application/vnd.openxmlformats-officedocument.presentationml.presentation", "application/octet-stream"))
+        "application/vnd.openxmlformats-officedocument.presentationml.presentation", "application/pdf", "application/octet-stream"))
 
     private fun pickGuion() = openDoc(PICK_GUION, arrayOf(
         "application/vnd.openxmlformats-officedocument.wordprocessingml.document", "text/plain", "application/octet-stream"))

@@ -45,6 +45,7 @@ jobs:
           --collect-all vosk
           --collect-all _sounddevice_data
           --hidden-import PySide6.QtTextToSpeech
+          --hidden-import PySide6.QtPdf
           --hidden-import win32com.client
           --hidden-import pythoncom
           run.py
@@ -57,6 +58,7 @@ jobs:
           $r = Get-Content selftest.json | ConvertFrom-Json
           if ($r.vosk -ne "ok") { throw "El modelo de voz no cargó" }
           if ($r.deck.sections -ne 13) { throw "No se leyó bien la presentación" }
+          if ($r.pdf -ne "ok") { throw "No se pueden dibujar PDF: $($r.pdf)" }
 
       - name: Comprimir
         shell: pwsh

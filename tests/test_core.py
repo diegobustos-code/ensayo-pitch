@@ -142,3 +142,25 @@ def test_turnos():
     assert [[s.slide_no for s in t] for t in d.turns_of("Bastián")] == [[3, 4]]
     assert [[s.slide_no for s in t] for t in d.turns_of("Daniel")] == [[7], [12]]
     assert len(d.turns_of("Diego Bustos")) == 4
+
+
+def test_pdf_con_guion(tmp_path):
+    from PySide6.QtGui import QPageSize, QPainter, QPdfWriter
+    from PySide6.QtWidgets import QApplication
+    QApplication.instance() or QApplication([])
+    pdf = str(tmp_path / "pres.pdf")
+    wr = QPdfWriter(pdf)
+    wr.setPageSize(QPageSize(QPageSize.A5))
+    p = QPainter(wr)
+    for i in range(3):
+        if i:
+            wr.newPage()
+        p.drawText(100, 100, f"Lámina {i + 1}")
+    p.end()
+    g = tmp_path / "g.txt"
+    g.write_text("Quién habla: Ana\nSegundos: 20\nLo que dice: Hola.\n---\nQuién habla: Bruno\nSegundos: 30\nLo que dice: Chao.\n", encoding="utf-8")
+    d = load_deck(pdf, cache_dir=str(tmp_path), guion_path=str(g))
+    assert all(s.image and s.image.endswith(".jpg") for s in d.sections)
+    import pytest
+    with pytest.raises(ValueError):
+        load_deck(pdf, render=False)
