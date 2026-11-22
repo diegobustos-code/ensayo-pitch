@@ -4,7 +4,7 @@ App para Windows y Android para ensayar el pitch del BioBloque. Cada uno elige s
 
 ## Descargar
 
-¿Primera vez? Mira el [tutorial con dibujos (PDF)](docs/Tutorial_Ensayo_Pitch.pdf). Ahí está todo, desde la descarga hasta el resultado.
+¿Primera vez? Mira el [tutorial de la 2.0 (PDF)](docs/Tutorial_Ensayo_Pitch_v2.pdf): cómo instalarla, rellenar la plantilla del guion, cargar los participantes y el PowerPoint, y ensayar. El [tutorial de la 1.0](docs/Tutorial_Ensayo_Pitch.pdf) sigue disponible.
 
 1. Ve a **Releases**, a la derecha de esta página, y baja `EnsayoPitch-Windows.zip` de la versión más nueva.
 2. Descomprímelo donde quieras (por ejemplo, en el Escritorio).

@@ -125,6 +125,7 @@ jobs:
           files: |
             out/windows/EnsayoPitch-Windows.zip
             out/android/EnsayoPitch-Android.apk
+            docs/Tutorial_Ensayo_Pitch_v2.pdf
             docs/Tutorial_Ensayo_Pitch.pdf
             ensayo/assets/plantillas/Plantilla_Guion.docx
             ensayo/assets/plantillas/Plantilla_Guion.txt
@@ -134,6 +135,6 @@ jobs:
 
             **Android:** descarga **EnsayoPitch-Android.apk** desde el teléfono y ábrelo. Si pide permiso para instalar apps de origen desconocido, actívalo para tu navegador o para Archivos.
 
-            El paso a paso con dibujos está en **Tutorial_Ensayo_Pitch.pdf**.
+            El paso a paso de la 2.0 está en **Tutorial_Ensayo_Pitch_v2.pdf** (el de la 1.0 sigue en Tutorial_Ensayo_Pitch.pdf).
 
             **Versión 2:** para ensayar otra presentación, rellena **Plantilla_Guion.docx** (o la .txt) y cárgala en la app con «Guion…», junto con el PowerPoint. **Guion_ejemplo_FireProof.docx** es un ejemplo ya relleno.

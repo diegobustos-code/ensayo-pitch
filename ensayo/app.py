@@ -955,11 +955,14 @@ class MainWindow(QMainWindow):
         guion = ""
         cur = getattr(self, "deck", None)
         if cur is not None and cur.guion:
-            r = QMessageBox.question(
-                self, APP_NAME, f"¿Usar el guion que ya cargaste ({os.path.basename(cur.guion)}) con esta presentación?\n\n"
-                "Sí: el guion pone el texto y los tiempos, y la presentación las imágenes.\n"
-                "No: se leen las notas del orador de la presentación.")
-            if r == QMessageBox.Yes:
+            box = QMessageBox(QMessageBox.Question, APP_NAME,
+                              f"¿Usar el guion que ya cargaste ({os.path.basename(cur.guion)}) con esta presentación?\n\n"
+                              "Sí: el guion pone el texto y los tiempos, y la presentación las imágenes.\n"
+                              "No: se leen las notas del orador de la presentación.", parent=self)
+            yes = box.addButton("Sí, usar el guion", QMessageBox.YesRole)
+            box.addButton("No, usar las notas", QMessageBox.NoRole)
+            box.exec()
+            if box.clickedButton() is yes:
                 guion = cur.guion
         self.load_material(path, guion)
 
@@ -1149,6 +1152,13 @@ def main():
     icon = os.path.join(asset_dir(), "icon.ico" if sys.platform == "win32" else "icon.png")
     if os.path.exists(icon):
         app.setWindowIcon(QIcon(icon))
+    try:
+        from PySide6.QtCore import QLibraryInfo, QTranslator
+        tr = QTranslator(app)
+        if tr.load("qtbase_es", QLibraryInfo.path(QLibraryInfo.TranslationsPath)):
+            app.installTranslator(tr)
+    except Exception:
+        pass
     force_light(app)
     app.setStyleSheet(QSS)
     w = MainWindow()
