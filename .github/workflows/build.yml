@@ -74,7 +74,10 @@ jobs:
         with:
           tag_name: ${{ startsWith(github.ref, 'refs/tags/') && github.ref_name || format('build-{0}', github.run_number) }}
           name: ${{ startsWith(github.ref, 'refs/tags/') && github.ref_name || format('Ensayo Pitch (compilación {0})', github.run_number) }}
-          files: EnsayoPitch-Windows.zip
+          files: |
+            EnsayoPitch-Windows.zip
+            docs/Tutorial_Ensayo_Pitch.pdf
           body: |
             Descarga **EnsayoPitch-Windows.zip**, descomprímelo y abre `EnsayoPitch.exe`.
+            El paso a paso con dibujos está en **Tutorial_Ensayo_Pitch.pdf**.
             Windows puede mostrar "Windows protegió su PC": haz clic en *Más información* → *Ejecutar de todas formas*.
