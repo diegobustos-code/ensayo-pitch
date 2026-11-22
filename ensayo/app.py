@@ -969,9 +969,14 @@ class MainWindow(QMainWindow):
         self.home.set_deck(deck, self.settings.get("profile"))
         if quiet:
             return
-        if pptx and not any(s.image for s in deck.sections):
-            QMessageBox.information(self, APP_NAME, "No pude sacar las imágenes de las láminas (para eso se necesita "
-                                    "PowerPoint instalado). Se mostrará el título o el comienzo del texto de cada parte.")
+        from . import deck as deckmod
+        simple = pptx and any(s.image and os.sep + "simple" + os.sep in s.image for s in deck.sections)
+        if pptx and (simple or not any(s.image for s in deck.sections)):
+            why = f"\n\nDetalle: {deckmod.LAST_RENDER_NOTE}." if deckmod.LAST_RENDER_NOTE else ""
+            QMessageBox.information(self, APP_NAME, "No pude abrir PowerPoint para sacar las láminas tal como se ven, así que "
+                                    "armé una vista simple de cada una con su título, su texto y su imagen principal. "
+                                    "Para ver las láminas reales, revisa que PowerPoint esté instalado y cerrado, y "
+                                    "vuelve a cargar la presentación." + why)
         elif guion and not pptx:
             QMessageBox.information(self, APP_NAME, f"Guion cargado: {len(deck.sections)} partes, "
                                     f"{len(deck.speakers)} personas, meta {fmt(deck.total_target)}.\n\n"

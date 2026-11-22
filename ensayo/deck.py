@@ -133,37 +133,133 @@ def _bundled_images(n_slides: int):
     return [os.path.join(d, f"s-{i:02d}.jpg") for i in range(1, n_slides + 1)]
 
 
+LAST_RENDER_NOTE = ""   # explica por qué no se pudo usar PowerPoint (se muestra en la app)
+
+
 def export_with_powerpoint(path: str, outdir: str, n_slides: int):
     """Imágenes de cada lámina usando PowerPoint (si está instalado). Devuelve lista o None."""
+    global LAST_RENDER_NOTE
     if sys.platform != "win32":
+        LAST_RENDER_NOTE = "solo funciona en Windows"
         return None
+    os.makedirs(outdir, exist_ok=True)
+    app = pres = None
     try:
         import pythoncom
         import win32com.client
-        pythoncom.CoInitialize()
-        app = win32com.client.DispatchEx("PowerPoint.Application")
-        pres = app.Presentations.Open(os.path.abspath(path), True, False, False)
-        os.makedirs(outdir, exist_ok=True)
-        pres.Export(outdir, "JPG", 1280, 720)
-        pres.Close()
         try:
-            if app.Presentations.Count == 0:
+            pythoncom.CoInitialize()
+        except Exception:
+            pass
+        try:
+            app = win32com.client.DispatchEx("PowerPoint.Application")
+        except Exception:
+            app = win32com.client.Dispatch("PowerPoint.Application")
+        # ReadOnly, Untitled, WithWindow
+        pres = app.Presentations.Open(os.path.abspath(path), True, False, False)
+        count = int(pres.Slides.Count)
+        for i in range(1, count + 1):
+            pres.Slides(i).Export(os.path.join(os.path.abspath(outdir), f"s-{i:02d}.jpg"), "JPG", 1280, 720)
+    except Exception as e:
+        LAST_RENDER_NOTE = f"PowerPoint no respondió ({e.__class__.__name__}: {str(e)[:160]})"
+    finally:
+        try:
+            if pres is not None:
+                pres.Close()
+            if app is not None and app.Presentations.Count == 0:
                 app.Quit()
         except Exception:
             pass
-    except Exception:
-        return None
     files = {}
     for fn in os.listdir(outdir):
-        m = re.search(r"(\d+)\.jpe?g$", fn, re.I)
+        m = re.match(r"s-(\d+)\.jpe?g$", fn, re.I)
         if m:
             files[int(m.group(1))] = os.path.join(outdir, fn)
     if not files:
+        if not LAST_RENDER_NOTE:
+            LAST_RENDER_NOTE = "PowerPoint no generó imágenes"
         return None
     return [files.get(i) for i in range(1, n_slides + 1)]
 
 
+def _shape_iter(shapes):
+    for sh in shapes:
+        yield sh
+        if getattr(sh, "shape_type", None) == 6:  # grupo
+            try:
+                yield from _shape_iter(sh.shapes)
+            except Exception:
+                pass
+
+
+def compose_slide_images(slides, outdir):
+    """Plan B sin PowerPoint: arma una imagen por lámina con su título, su texto y su foto principal."""
+    try:
+        from PySide6.QtCore import QRectF, Qt
+        from PySide6.QtGui import QColor, QFont, QGuiApplication, QImage, QPainter
+    except Exception:
+        return None
+    if QGuiApplication.instance() is None:
+        return None
+    os.makedirs(outdir, exist_ok=True)
+    out = []
+    W, H = 1280, 720
+    for i, slide in enumerate(slides, start=1):
+        title = _slide_title(slide)
+        lines, pic, best = [], None, 0
+        for sh in _shape_iter(slide.shapes):
+            try:
+                if getattr(sh, "shape_type", None) == 13:  # imagen
+                    area = int(sh.width or 0) * int(sh.height or 0)
+                    if area > best:
+                        best, pic = area, sh.image.blob
+                elif getattr(sh, "has_text_frame", False):
+                    for para in sh.text_frame.paragraphs:
+                        t = "".join(r.text for r in para.runs).strip()
+                        if t and t != title and t not in lines:
+                            lines.append(t)
+            except Exception:
+                continue
+        img = QImage(W, H, QImage.Format_RGB32)
+        img.fill(QColor("#ffffff"))
+        p = QPainter(img)
+        p.setRenderHint(QPainter.Antialiasing)
+        p.setRenderHint(QPainter.SmoothPixmapTransform)
+        p.fillRect(0, 0, W, 10, QColor("#b5652b"))
+        text_w = W - 120
+        if pic:
+            q = QImage()
+            if q.loadFromData(pic):
+                box = QRectF(W * 0.52, 140, W * 0.44, H - 190)
+                sc = q.scaled(int(box.width()), int(box.height()), Qt.KeepAspectRatio, Qt.SmoothTransformation)
+                p.drawImage(int(box.x() + (box.width() - sc.width()) / 2), int(box.y() + (box.height() - sc.height()) / 2), sc)
+                text_w = int(W * 0.52) - 90
+        f = QFont("Segoe UI")
+        f.setPixelSize(46)
+        f.setBold(True)
+        p.setFont(f)
+        p.setPen(QColor("#2b2722"))
+        p.drawText(QRectF(60, 40, W - 120, 90), Qt.AlignLeft | Qt.AlignVCenter | Qt.TextWordWrap, title or f"Lámina {i}")
+        f.setPixelSize(26)
+        f.setBold(False)
+        p.setFont(f)
+        p.setPen(QColor("#4a433c"))
+        p.drawText(QRectF(60, 150, text_w, H - 200), Qt.AlignLeft | Qt.AlignTop | Qt.TextWordWrap,
+                   "\n".join("• " + l for l in lines[:9]))
+        f.setPixelSize(18)
+        p.setFont(f)
+        p.setPen(QColor("#9a9087"))
+        p.drawText(QRectF(60, H - 44, W - 120, 30), Qt.AlignRight, f"Lámina {i} · vista simple")
+        p.end()
+        fp = os.path.join(outdir, f"c-{i:02d}.png")
+        img.save(fp)
+        out.append(fp)
+    return out
+
+
 def _slide_images(path, slides, is_default, cache_dir, render):
+    global LAST_RENDER_NOTE
+    LAST_RENDER_NOTE = ""
     images = [None] * len(slides)
     if is_default:
         return [p if os.path.exists(p) else None for p in _bundled_images(len(slides))]
@@ -172,13 +268,18 @@ def _slide_images(path, slides, is_default, cache_dir, render):
     cache_dir = cache_dir or os.path.join(tempfile.gettempdir(), "EnsayoPitch")
     outdir = os.path.join(cache_dir, "laminas", file_hash(path))
     got = None
-    if os.path.isdir(outdir) and os.listdir(outdir):
-        got = [os.path.join(outdir, f) for f in os.listdir(outdir) if re.search(r"(\d+)\.jpe?g$", f, re.I)]
-        got = sorted(got, key=lambda p: int(re.search(r"(\d+)\.jpe?g$", os.path.basename(p), re.I).group(1)))
-        if len(got) < len(slides):
-            got = None
+    if os.path.isdir(outdir):
+        found = {}
+        for f in os.listdir(outdir):
+            m = re.match(r"s-(\d+)\.jpe?g$", f, re.I)
+            if m:
+                found[int(m.group(1))] = os.path.join(outdir, f)
+        if len(found) >= len(slides):
+            got = [found.get(i) for i in range(1, len(slides) + 1)]
     if got is None:
         got = export_with_powerpoint(path, outdir, len(slides))
+    if got is None:
+        got = compose_slide_images(slides, os.path.join(outdir, "simple"))
     return got or images
 
 
