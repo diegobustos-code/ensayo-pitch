@@ -30,6 +30,28 @@ class Deck(val name: String, val sections: List<Section>, val isDefault: Boolean
     val minTotal: Double get() = Math.round(totalTarget * 0.9).toDouble()
     val maxTotal: Double get() = totalTarget + 5.0
     fun targetFor(sp: String) = sections.filter { it.speaker == sp }.sumOf { it.targetS }
+
+    /** Turnos de una persona: láminas seguidas de la misma persona cuentan como un solo turno. */
+    fun turnsOf(sp: String): List<List<Section>> {
+        val out = mutableListOf<MutableList<Section>>()
+        var cur: MutableList<Section>? = null
+        for (s in sections) {
+            if (s.speaker == sp) {
+                val c = cur
+                if (c != null && c.last().index == s.index - 1) c.add(s)
+                else { val n = mutableListOf(s); out.add(n); cur = n }
+            } else cur = null
+        }
+        return out
+    }
+
+    fun turnLabel(sp: String): String {
+        val t = turnsOf(sp)
+        val nS = t.sumOf { it.size }
+        var txt = if (t.size == 1) "1 turno" else "${t.size} turnos"
+        if (nS != t.size) txt += " · $nS láminas"
+        return txt
+    }
 }
 
 object DeckParser {

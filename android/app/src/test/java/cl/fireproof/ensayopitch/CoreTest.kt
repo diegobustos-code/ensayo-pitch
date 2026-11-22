@@ -142,3 +142,14 @@ class GuionTest {
         assertEquals(listOf("30 %", "cliente"), e[1].keywords)
     }
 }
+
+class TurnosTest {
+    @Test fun turnos() {
+        val f = listOf("../../ensayo/assets/default.pptx", "../ensayo/assets/default.pptx").map { File(it) }.first { it.exists() }
+        val d = DeckParser.load(f.readBytes(), "t", true, { null }, Curated.KEYWORDS)
+        assertEquals(listOf(listOf(3, 4)), d.turnsOf("Bastián").map { t -> t.map { it.slideNo } })
+        assertEquals("1 turno · 2 láminas", d.turnLabel("Bastián"))
+        assertEquals("2 turnos", d.turnLabel("Daniel"))
+        assertEquals("4 turnos", d.turnLabel("Diego Bustos"))
+    }
+}

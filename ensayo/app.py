@@ -88,6 +88,16 @@ def label(text="", obj=None, wrap=False, size=None, bold=False, color=None):
     return l
 
 
+def turn_label(deck, name):
+    """'1 turno', o '1 turno · 2 láminas' cuando pasa más de una diapositiva seguida."""
+    turns = deck.turns_of(name)
+    n_t, n_s = len(turns), sum(len(t) for t in turns)
+    txt = "1 turno" if n_t == 1 else f"{n_t} turnos"
+    if n_s != n_t:
+        txt += f" · {n_s} láminas"
+    return txt
+
+
 def initials(name):
     parts = [p for p in name.split() if p[:1].isupper()]
     return "".join(p[0] for p in parts[:2]) or name[:2]
@@ -385,7 +395,7 @@ class HomePage(QWidget):
             color = self.win.color_for(n)
             txt = "Todo el equipo" if n == TEAM_PROFILE else n
             sub = "sin perfil, se ve todo igual" if n == TEAM_PROFILE else \
-                f"{(lambda k: f'{k} parte' if k == 1 else f'{k} partes')(sum(1 for s in deck.sections if s.speaker == n))} · {fmt(deck.target_for(n))}"
+                f"{turn_label(deck, n)} · {fmt(deck.target_for(n))}"
             b = QPushButton(f"  {txt}\n  {sub}")
             b.setObjectName("profile")
             b.setCheckable(True)
@@ -422,16 +432,24 @@ class HomePage(QWidget):
                 f"<td style='padding-right:10px'>{s.target_s} s</td><td>{s.text[:80] + ('…' if len(s.text) > 80 else '')}</td></tr>" for s in self.deck.sections)
             self.info.setText(f"<table cellspacing=3>{rows}</table>")
         else:
-            mine = [s for s in self.deck.sections if s.speaker == p]
-            self.info_title.setText(f"Hola, {p.split()[0]}. Tus partes")
+            turns = self.deck.turns_of(p)
+            self.info_title.setText(f"Hola, {p.split()[0]}. Tus turnos")
             parts = []
-            for s in mine:
-                prev = self.deck.sections[s.index - 1].speaker if s.index > 0 else None
-                cue = f"entras después de <b>{prev}</b>" if prev and prev != p else ("abres el pitch" if s.index == 0 else "sigues tú mismo")
-                kws = ", ".join(k[0] for k in s.keywords)
-                parts.append(f"<p><b>Lámina {s.slide_no}</b> · {s.target_s} s · {cue}<br>"
-                             f"<span style='color:#776d63'>No olvides: {kws}</span><br>"
-                             f"<span style='color:#776d63'>Frase de salida: «…{' '.join(s.tail)}»</span></p>")
+            for n, turn in enumerate(turns, start=1):
+                first, last = turn[0], turn[-1]
+                prev = self.deck.sections[first.index - 1].speaker if first.index > 0 else None
+                cue = f"entras después de <b>{prev}</b>" if prev else "abres el pitch"
+                slides = f"Lámina {first.slide_no}" if len(turn) == 1 else \
+                    "Láminas " + ", ".join(str(x.slide_no) for x in turn[:-1]) + f" y {last.slide_no}"
+                head = f"<b>Turno {n}</b> · {slides} · {fmt(sum(x.target_s for x in turn))} · {cue}"
+                body = ""
+                for x in turn:
+                    kws = ", ".join(k[0] for k in x.keywords)
+                    pre = f"Lámina {x.slide_no} ({x.target_s} s): " if len(turn) > 1 else ""
+                    body += f"<br><span style='color:#776d63'>{pre}no olvides {kws}</span>"
+                    if x is not last:
+                        body += f"<br><span style='color:#776d63'>&nbsp;&nbsp;→ al terminar, pasa a la lámina {self.deck.sections[x.index + 1].slide_no}</span>"
+                parts.append(f"<p>{head}{body}<br><span style='color:#776d63'>Frase de salida: «…{' '.join(last.tail)}»</span></p>")
             hist = storage.history_for(p)[-5:]
             if hist:
                 parts.append("<p><b>Tus últimos ensayos</b><br>" + "<br>".join(
@@ -629,8 +647,12 @@ class SessionPage(QWidget):
             self.next_lbl.setText("Última parte del pitch.")
         else:
             nn = nxt.section.speaker
-            extra = " · <b style='color:#b5652b'>¡te toca a ti!</b>" if self.reh.is_mine(nxt) and not mine else ""
-            self.next_lbl.setText(f"Sigue: <b>{nn}</b> (lámina {nxt.section.slide_no}){extra}")
+            if nn == s.speaker:
+                quien = "tú" if mine else nn
+                self.next_lbl.setText(f"Sigue hablando <b>{quien}</b>: pasa a la lámina {nxt.section.slide_no}")
+            else:
+                extra = " · <b style='color:#b5652b'>¡te toca a ti!</b>" if self.reh.is_mine(nxt) and not mine else ""
+                self.next_lbl.setText(f"Sigue: <b>{nn}</b> (lámina {nxt.section.slide_no}){extra}")
         self.next_lbl.setTextFormat(Qt.RichText)
         self._machine_deadline = None
         if r.by_machine:

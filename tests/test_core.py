@@ -135,3 +135,10 @@ def test_deck_with_guion():
         t = _run(reh, t, s.target_s * 0.9, text=s.text)
         t = _run(reh, t, 1.0, voiced=False)
     assert reh.finished
+
+
+def test_turnos():
+    d = load_deck(render=False)
+    assert [[s.slide_no for s in t] for t in d.turns_of("Bastián")] == [[3, 4]]
+    assert [[s.slide_no for s in t] for t in d.turns_of("Daniel")] == [[7], [12]]
+    assert len(d.turns_of("Diego Bustos")) == 4

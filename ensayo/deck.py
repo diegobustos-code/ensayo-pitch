@@ -79,6 +79,20 @@ class Deck:
     def total_target(self) -> int:
         return sum(s.target_s for s in self.sections)
 
+    def turns_of(self, speaker: str):
+        """Turnos de una persona: láminas seguidas de la misma persona cuentan como un solo turno."""
+        out, cur = [], None
+        for s in self.sections:
+            if s.speaker == speaker:
+                if cur is not None and cur[-1].index == s.index - 1:
+                    cur.append(s)
+                else:
+                    cur = [s]
+                    out.append(cur)
+            else:
+                cur = None
+        return out
+
     def target_for(self, speaker: str) -> int:
         return sum(s.target_s for s in self.sections if s.speaker == speaker)
 

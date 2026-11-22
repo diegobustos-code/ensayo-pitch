@@ -564,9 +564,8 @@ class MainActivity : Activity(), AudioListener {
             }
             item.addView(avatar(n, 34))
             val t = vbox().apply { setPadding(dp(8), 0, 0, 0) }
-            val k = deck.sections.count { it.speaker == n }
             t.addView(tv(if (n == TEAM_PROFILE) "Todo el equipo" else n, 14f, true).apply { maxLines = 1 })
-            t.addView(tv(if (n == TEAM_PROFILE) "sin perfil" else "${if (k == 1) "1 parte" else "$k partes"} · ${fmt(deck.targetFor(n).toDouble())}",
+            t.addView(tv(if (n == TEAM_PROFILE) "sin perfil" else "${deck.turnLabel(n)} · ${fmt(deck.targetFor(n).toDouble())}",
                 12f, color = MUTED))
             item.addView(t)
             row!!.addView(item, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f).apply {
@@ -664,14 +663,22 @@ class MainActivity : Activity(), AudioListener {
             }
             ic.addView(tv(html(sb.toString()), 14f), lp(top = 6))
         } else {
-            ic.addView(tv("Hola, ${p.split(" ")[0]}. Tus partes", 17f, true))
+            ic.addView(tv("Hola, ${p.split(" ")[0]}. Tus turnos", 17f, true))
             val sb = StringBuilder()
-            for (s in deck.sections.filter { it.speaker == p }) {
-                val prev = deck.sections.getOrNull(s.index - 1)?.speaker
-                val cue = if (prev != null && prev != p) "entras después de <b>$prev</b>" else if (s.index == 0) "abres el pitch" else "sigues tú"
-                sb.append("<b>Lámina ${s.slideNo}</b> · ${s.targetS} s · $cue<br>")
-                sb.append("<font color='#776d63'>No olvides: ${s.keywords.joinToString(", ") { it.label }}</font><br>")
-                sb.append("<font color='#776d63'>Frase de salida: «…${s.tail.joinToString(" ")}»</font><br><br>")
+            deck.turnsOf(p).forEachIndexed { n, turn ->
+                val first = turn.first()
+                val last = turn.last()
+                val prev = deck.sections.getOrNull(first.index - 1)?.speaker
+                val cue = if (prev != null) "entras después de <b>$prev</b>" else "abres el pitch"
+                val slides = if (turn.size == 1) "Lámina ${first.slideNo}"
+                    else "Láminas " + turn.dropLast(1).joinToString(", ") { it.slideNo.toString() } + " y ${last.slideNo}"
+                sb.append("<b>Turno ${n + 1}</b> · $slides · ${fmt(turn.sumOf { it.targetS }.toDouble())} · $cue<br>")
+                for (x in turn) {
+                    val pre = if (turn.size > 1) "Lámina ${x.slideNo} (${x.targetS} s): " else ""
+                    sb.append("<font color='#776d63'>${pre}no olvides ${x.keywords.joinToString(", ") { it.label }}</font><br>")
+                    if (x !== last) sb.append("<font color='#776d63'>&nbsp;&nbsp;→ al terminar, pasa a la lámina ${deck.sections[x.index + 1].slideNo}</font><br>")
+                }
+                sb.append("<font color='#776d63'>Frase de salida: «…${last.tail.joinToString(" ")}»</font><br><br>")
             }
             val hist = store.historyFor(p).takeLast(5).reversed()
             if (hist.isNotEmpty()) {
@@ -847,7 +854,9 @@ class MainActivity : Activity(), AudioListener {
         val show = run.byMachine || !mine || showScript || r.profile == null
         sv.script.text = if (show) s.text else "(Guion oculto: dilo de memoria. Puedes activarlo en el inicio.)"
         val nx = r.nextRun
-        sv.next.text = if (nx == null) html("Última parte del pitch.") else {
+        sv.next.text = if (nx == null) html("Última parte del pitch.") else if (nx.section.speaker == s.speaker) {
+            html("Sigue hablando <b>${if (mine) "tú" else s.speaker}</b>: pasa a la lámina ${nx.section.slideNo}")
+        } else {
             val extra = if (r.isMine(nx) && !mine) " · <font color='#b5652b'><b>¡te toca a ti!</b></font>" else ""
             html("Sigue: <b>${nx.section.speaker}</b> (lámina ${nx.section.slideNo})$extra")
         }
