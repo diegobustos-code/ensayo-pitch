@@ -1,0 +1,6 @@
+PySide6==6.9.3
+vosk==0.3.45
+sounddevice==0.5.2
+python-pptx==1.0.2
+num2words==0.5.14
+pywin32==308; sys_platform == "win32"

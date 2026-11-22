@@ -1,0 +1,79 @@
+name: Compilar app para Windows
+
+on:
+  push:
+    branches: [main]
+    tags: ["v*"]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  windows:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Instalar dependencias
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt pyinstaller==6.11.1 pytest
+
+      - name: Pruebas
+        env:
+          QT_QPA_PLATFORM: offscreen
+        run: python -m pytest -q tests
+
+      - name: Descargar modelo de voz en español (Vosk)
+        shell: pwsh
+        run: |
+          Invoke-WebRequest https://alphacephei.com/vosk/models/vosk-model-small-es-0.42.zip -OutFile model.zip
+          Expand-Archive model.zip -DestinationPath tmpmodel
+          Move-Item tmpmodel/vosk-model-small-es-0.42 model
+
+      - name: Empaquetar con PyInstaller
+        run: >
+          pyinstaller --noconfirm --windowed --name EnsayoPitch
+          --add-data "ensayo/assets;assets"
+          --add-data "model;model"
+          --collect-all vosk
+          --collect-all _sounddevice_data
+          --hidden-import PySide6.QtTextToSpeech
+          --hidden-import win32com.client
+          --hidden-import pythoncom
+          run.py
+
+      - name: Probar el ejecutable
+        shell: pwsh
+        run: |
+          $p = Start-Process dist/EnsayoPitch/EnsayoPitch.exe -ArgumentList "--selftest","selftest.json" -PassThru -Wait
+          Get-Content selftest.json
+          # en el servidor no hay micrófono ni tarjeta de sonido: PortAudio puede quejarse, el resto tiene que estar bien
+          $r = Get-Content selftest.json | ConvertFrom-Json
+          if ($r.vosk -ne "ok") { throw "El modelo de voz no cargó" }
+          if ($r.deck.sections -ne 13) { throw "No se leyó bien la presentación" }
+
+      - name: Comprimir
+        shell: pwsh
+        run: Compress-Archive -Path dist/EnsayoPitch -DestinationPath EnsayoPitch-Windows.zip
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: EnsayoPitch-Windows
+          path: EnsayoPitch-Windows.zip
+
+      - name: Publicar versión
+        if: github.ref_type == 'branch' && github.ref_name == 'main' || startsWith(github.ref, 'refs/tags/')
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ startsWith(github.ref, 'refs/tags/') && github.ref_name || format('build-{0}', github.run_number) }}
+          name: ${{ startsWith(github.ref, 'refs/tags/') && github.ref_name || format('Ensayo Pitch (compilación {0})', github.run_number) }}
+          files: EnsayoPitch-Windows.zip
+          body: |
+            Descarga **EnsayoPitch-Windows.zip**, descomprímelo y abre `EnsayoPitch.exe`.
+            Windows puede mostrar "Windows protegió su PC": haz clic en *Más información* → *Ejecutar de todas formas*.
