@@ -38,6 +38,15 @@ QPushButton#mode { text-align: left; padding: 14px; border-radius: 12px; font-si
 QPushButton#mode:checked { background: #fff3e4; border: 2px solid #b5652b; }
 QPushButton#mode:disabled { color: #b3aaa0; }
 QComboBox { background: white; border: 1px solid #d6cdc1; border-radius: 6px; padding: 5px 8px; }
+QComboBox QAbstractItemView { background: white; color: #2b2722; border: 1px solid #d6cdc1;
+    selection-background-color: #fff3e4; selection-color: #2b2722; outline: 0; }
+QMessageBox, QDialog { background: #f4f1ec; }
+QMessageBox QLabel { color: #2b2722; }
+QMenu { background: white; color: #2b2722; border: 1px solid #d6cdc1; }
+QMenu::item:selected { background: #fff3e4; }
+QScrollBar:vertical { background: transparent; width: 10px; }
+QScrollBar::handle:vertical { background: #d6cdc1; border-radius: 5px; min-height: 30px; }
+QScrollBar::add-line, QScrollBar::sub-line { height: 0; }
 QProgressBar { background: #ebe5dc; border: none; border-radius: 5px; height: 10px; text-align: center; }
 QProgressBar::chunk { border-radius: 5px; background: #2f7d4f; }
 QTextEdit { background: #fbfaf8; border: 1px solid #e4ddd3; border-radius: 8px; padding: 6px; font-size: 13px; }
@@ -1070,6 +1079,35 @@ def selftest(out_path):
     return 0 if ok else 1
 
 
+def force_light(app):
+    """La app usa siempre colores claros, aunque Windows esté en modo oscuro."""
+    from PySide6.QtGui import QPalette
+    try:
+        app.styleHints().setColorScheme(Qt.ColorScheme.Light)
+    except Exception:
+        pass
+    app.setStyle("Fusion")
+    pal = QPalette()
+    ink, paper, white = QColor("#2b2722"), QColor("#f4f1ec"), QColor("#ffffff")
+    for group in (QPalette.Active, QPalette.Inactive):
+        pal.setColor(group, QPalette.Window, paper)
+        pal.setColor(group, QPalette.WindowText, ink)
+        pal.setColor(group, QPalette.Base, white)
+        pal.setColor(group, QPalette.AlternateBase, QColor("#fbfaf8"))
+        pal.setColor(group, QPalette.Text, ink)
+        pal.setColor(group, QPalette.Button, white)
+        pal.setColor(group, QPalette.ButtonText, ink)
+        pal.setColor(group, QPalette.ToolTipBase, QColor("#fffaf3"))
+        pal.setColor(group, QPalette.ToolTipText, ink)
+        pal.setColor(group, QPalette.Highlight, QColor("#b5652b"))
+        pal.setColor(group, QPalette.HighlightedText, white)
+        pal.setColor(group, QPalette.PlaceholderText, QColor("#9a9087"))
+        pal.setColor(group, QPalette.Link, QColor("#b5652b"))
+    for role in (QPalette.WindowText, QPalette.Text, QPalette.ButtonText):
+        pal.setColor(QPalette.Disabled, role, QColor("#b3aaa0"))
+    app.setPalette(pal)
+
+
 def main():
     if len(sys.argv) >= 3 and sys.argv[1] == "--selftest":
         sys.exit(selftest(sys.argv[2]))
@@ -1084,6 +1122,7 @@ def main():
     icon = os.path.join(asset_dir(), "icon.ico" if sys.platform == "win32" else "icon.png")
     if os.path.exists(icon):
         app.setWindowIcon(QIcon(icon))
+    force_light(app)
     app.setStyleSheet(QSS)
     w = MainWindow()
     w.show()
