@@ -105,3 +105,33 @@ def test_report(tmp_path):
         reh.advance(t)
     p = write_report(reh.summary(), str(tmp_path))
     assert os.path.exists(p) and "Daniel" in open(p, encoding="utf-8").read()
+
+
+def test_guion_formats(tmp_path):
+    from ensayo import guion
+    base = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "ensayo", "assets", "plantillas")
+    ej = guion.load(os.path.join(base, "Guion_ejemplo_FireProof.docx"))
+    assert len(ej) == 13 and ej[1].speaker == "César" and ej[1].secs == 30 and ej[0].keywords
+    t = tmp_path / "g.txt"
+    t.write_text("# hola\nQuién habla: Ana\nSegundos: 0:25\nLo que dice:\nPrimera línea.\nSegunda línea.\n---\n"
+                 "Lámina: 4\nOrador: Bruno\nTiempo: 1 min\nPuntos clave: 30 %; cliente\nTexto: Hola a todos.\n", encoding="utf-8")
+    e = guion.load(str(t))
+    assert [x.slide for x in e] == [1, 4]
+    assert e[0].secs == 25 and e[0].text == "Primera línea. Segunda línea."
+    assert e[1].secs == 60 and e[1].keywords == ["30 %", "cliente"]
+
+
+def test_deck_with_guion():
+    base = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "ensayo", "assets")
+    d = load_deck(os.path.join(base, "default.pptx"), render=False,
+                  guion_path=os.path.join(base, "plantillas", "Guion_ejemplo_FireProof.docx"))
+    assert d.total_target == 300 and (d.min_total, d.max_total) == (270, 305)
+    assert d.sections[0].title  # título sacado de la lámina
+    assert any("mil setecientos" in alts for _, alts in d.sections[2].keywords)
+    reh = Rehearsal(d, mode=TEAM)
+    t = 0.0
+    reh.start(t)
+    for s in d.sections:
+        t = _run(reh, t, s.target_s * 0.9, text=s.text)
+        t = _run(reh, t, 1.0, voiced=False)
+    assert reh.finished

@@ -87,6 +87,7 @@ jobs:
           mkdir -p $A/slides
           cp ensayo/assets/default.pptx $A/
           cp ensayo/assets/slides/*.jpg $A/slides/
+          cp -r ensayo/assets/plantillas $A/
           curl -sSL -o model.zip https://alphacephei.com/vosk/models/vosk-model-small-es-0.42.zip
           unzip -q model.zip
           mv vosk-model-small-es-0.42 $A/model-es
@@ -125,9 +126,14 @@ jobs:
             out/windows/EnsayoPitch-Windows.zip
             out/android/EnsayoPitch-Android.apk
             docs/Tutorial_Ensayo_Pitch.pdf
+            ensayo/assets/plantillas/Plantilla_Guion.docx
+            ensayo/assets/plantillas/Plantilla_Guion.txt
+            ensayo/assets/plantillas/Guion_ejemplo_FireProof.docx
           body: |
             **Windows:** descarga **EnsayoPitch-Windows.zip**, descomprímelo y abre `EnsayoPitch.exe`. Si sale "Windows protegió su PC": *Más información* → *Ejecutar de todas formas*.
 
             **Android:** descarga **EnsayoPitch-Android.apk** desde el teléfono y ábrelo. Si pide permiso para instalar apps de origen desconocido, actívalo para tu navegador o para Archivos.
 
             El paso a paso con dibujos está en **Tutorial_Ensayo_Pitch.pdf**.
+
+            **Versión 2:** para ensayar otra presentación, rellena **Plantilla_Guion.docx** (o la .txt) y cárgala en la app con «Guion…», junto con el PowerPoint. **Guion_ejemplo_FireProof.docx** es un ejemplo ya relleno.

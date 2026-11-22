@@ -1,0 +1,20 @@
+# Guion del pitch (formato de texto)
+# Las líneas que empiezan con # no se leen. Borra estas instrucciones si quieres.
+# Un bloque por lámina o por turno, separados por una línea con tres guiones: ---
+# "Segundos" acepta 25, "25 s" o "0:25". "Puntos clave" es opcional (separados por ;).
+# El texto de "Lo que dice" puede ocupar varias líneas.
+
+Lámina: 1
+Quién habla: Nombre Apellido
+Segundos: 20
+Puntos clave: idea 1; idea 2
+Lo que dice:
+Escribe aquí lo que dice esta persona en la lámina 1.
+---
+Lámina: 2
+Quién habla: Otro Nombre
+Segundos: 30
+Puntos clave:
+Lo que dice:
+Escribe aquí lo que se dice en la lámina 2.
+---

@@ -191,3 +191,19 @@ primero segundo tercero despues ademas entonces luego tambien siempre nunca ahor
 }
 
 data class Keyword(val label: String, val alts: List<String>)
+
+/** Punto clave escrito en el guion: vale la frase completa, sus cifras en palabras o sus palabras con más contenido. */
+fun labelKeyword(label: String): Keyword {
+    val alts = mutableListOf<String>()
+    val n = TextMatch.normalize(label)
+    if (n.isNotEmpty()) alts.add(n)
+    val toks = Regex("\\d[\\d.,]*|[^\\s\\d]+").findAll(label).map { it.value }.toList()
+    toks.forEachIndexed { i, tok ->
+        if (tok[0].isDigit()) {
+            val nxt = if (i + 1 < toks.size) toks[i + 1] else ""
+            alts.addAll(TextMatch.numberForms(tok.trimEnd('.', ','), nxt).sorted())
+        }
+    }
+    for (w in n.split(" ")) if (w.length >= 5 && w !in TextMatch.STOP && w !in alts) alts.add(w)
+    return Keyword(label.trim(), if (alts.isEmpty()) listOf(label) else alts)
+}

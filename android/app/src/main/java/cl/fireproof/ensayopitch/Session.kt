@@ -196,8 +196,8 @@ class Rehearsal(val deck: Deck, val mode: String = TEAM, val profile: String? = 
     fun verdict(): String {
         val t = totalElapsed()
         return when {
-            t < TOTAL_MIN -> "corto"
-            t > TOTAL_MAX -> "largo"
+            t < deck.minTotal -> "corto"
+            t > deck.maxTotal -> "largo"
             else -> "ok"
         }
     }

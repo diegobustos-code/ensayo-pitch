@@ -219,9 +219,9 @@ class Rehearsal:
 
     def verdict(self):
         t = self.total_elapsed()
-        if t < TOTAL_MIN:
+        if t < self.deck.min_total:
             return "corto", t
-        if t > TOTAL_MAX:
+        if t > self.deck.max_total:
             return "largo", t
         return "ok", t
 
@@ -230,6 +230,7 @@ class Rehearsal:
         return {
             "mode": self.mode, "profile": self.profile, "deck": self.deck.path,
             "total": round(t, 1), "target_total": self.deck.total_target, "verdict": v,
+            "min_total": self.deck.min_total, "max_total": self.deck.max_total, "deck_name": self.deck.name,
             "speakers": [{**d, "real": round(d["real"], 1), "voiced": round(d["voiced"], 1)} for d in self.per_speaker()],
             "sections": [r.to_dict() for r in self.runs if r.start is not None],
         }

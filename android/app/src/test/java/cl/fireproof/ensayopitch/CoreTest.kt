@@ -108,3 +108,37 @@ class CoreTest {
         assertTrue(r.runs[0].hitLabels().isNotEmpty())
     }
 }
+
+class GuionTest {
+    private fun asset(name: String): File = listOf("../../ensayo/assets/$name", "../ensayo/assets/$name").map { File(it) }.first { it.exists() }
+
+    @Test fun ejemploDocx() {
+        val e = GuionParser.parse(asset("plantillas/Guion_ejemplo_FireProof.docx").readBytes())
+        assertEquals(13, e.size)
+        assertEquals("César", e[1].speaker)
+        assertEquals(30, e[1].secs)
+        assertTrue(e[0].keywords.isNotEmpty())
+        val d = DeckParser.loadWithGuion(e, "ejemplo", asset("default.pptx").readBytes())
+        assertEquals(300, d.totalTarget)
+        assertEquals(270.0, d.minTotal, 0.01)
+        assertEquals(305.0, d.maxTotal, 0.01)
+        assertTrue(d.sections[0].title.isNotEmpty())
+        assertTrue(d.sections[2].keywords.any { "mil setecientos" in it.alts })
+    }
+
+    @Test fun plantillas() {
+        assertEquals(1, GuionParser.parse(asset("plantillas/Plantilla_Guion.docx").readBytes()).size)
+        assertEquals(2, GuionParser.parse(asset("plantillas/Plantilla_Guion.txt").readBytes()).size)
+    }
+
+    @Test fun texto() {
+        val txt = "# hola\nQuién habla: Ana\nSegundos: 0:25\nLo que dice:\nPrimera línea.\nSegunda línea.\n---\n" +
+            "Lámina: 4\nOrador: Bruno\nTiempo: 1 min\nPuntos clave: 30 %; cliente\nTexto: Hola a todos.\n"
+        val e = GuionParser.parse(txt.toByteArray())
+        assertEquals(listOf(1, 4), e.map { it.slide })
+        assertEquals(25, e[0].secs)
+        assertEquals("Primera línea. Segunda línea.", e[0].text)
+        assertEquals(60, e[1].secs)
+        assertEquals(listOf("30 %", "cliente"), e[1].keywords)
+    }
+}

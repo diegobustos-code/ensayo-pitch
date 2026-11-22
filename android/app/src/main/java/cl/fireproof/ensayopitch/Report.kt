@@ -127,7 +127,7 @@ th,td{padding:7px 8px;text-align:left;border-bottom:1px solid #eee;font-size:14p
 tr.mine td{background:#fff6e5}h2{font-size:17px;margin:20px 0 8px}
 </style></head><body><div class="wrap">
 <h1>Informe de ensayo · ${esc(who)}</h1>
-<div class="sub">$mode · ${SimpleDateFormat("dd-MM-yyyy HH:mm", Locale.US).format(Date())} · meta ${fmt(TOTAL_MIN)}–${fmt(TOTAL_MAX)}</div>
+<div class="sub">$mode · ${SimpleDateFormat("dd-MM-yyyy HH:mm", Locale.US).format(Date())} · meta ${fmt(reh.deck.minTotal)}–${fmt(reh.deck.maxTotal)} · ${esc(reh.deck.name)}</div>
 <div class="big" style="color:$vcol">${fmt(total)}</div><div>$vtxt · meta del guion ${fmt(reh.deck.totalTarget.toDouble())}</div>
 <h2>${if (prof != null) "Para ti" else "Para mejorar"}</h2><ul>$tips</ul>
 <h2>Por integrante</h2>

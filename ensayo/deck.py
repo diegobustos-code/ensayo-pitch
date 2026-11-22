@@ -47,6 +47,25 @@ class Section:
 class Deck:
     path: str
     sections: List[Section]
+    guion: Optional[str] = None
+    is_default: bool = False
+
+    @property
+    def name(self) -> str:
+        if self.is_default:
+            return "Pitch Fire Proof"
+        if self.guion:
+            return os.path.splitext(os.path.basename(self.guion))[0]
+        return os.path.splitext(os.path.basename(self.path))[0]
+
+    @property
+    def min_total(self) -> int:
+        """Rango aceptable: hasta 10 % menos que la meta y 5 s de más (5:00 -> 4:30-5:05)."""
+        return int(round(self.total_target * 0.9))
+
+    @property
+    def max_total(self) -> int:
+        return self.total_target + 5
 
     @property
     def speakers(self) -> List[str]:
@@ -144,31 +163,39 @@ def export_with_powerpoint(path: str, outdir: str, n_slides: int):
     return [files.get(i) for i in range(1, n_slides + 1)]
 
 
-def load_deck(path: Optional[str] = None, cache_dir: Optional[str] = None, render: bool = True) -> Deck:
+def _slide_images(path, slides, is_default, cache_dir, render):
+    images = [None] * len(slides)
+    if is_default:
+        return [p if os.path.exists(p) else None for p in _bundled_images(len(slides))]
+    if not render:
+        return images
+    cache_dir = cache_dir or os.path.join(tempfile.gettempdir(), "EnsayoPitch")
+    outdir = os.path.join(cache_dir, "laminas", file_hash(path))
+    got = None
+    if os.path.isdir(outdir) and os.listdir(outdir):
+        got = [os.path.join(outdir, f) for f in os.listdir(outdir) if re.search(r"(\d+)\.jpe?g$", f, re.I)]
+        got = sorted(got, key=lambda p: int(re.search(r"(\d+)\.jpe?g$", os.path.basename(p), re.I).group(1)))
+        if len(got) < len(slides):
+            got = None
+    if got is None:
+        got = export_with_powerpoint(path, outdir, len(slides))
+    return got or images
+
+
+def load_deck(path: Optional[str] = None, cache_dir: Optional[str] = None, render: bool = True,
+              guion_path: Optional[str] = None) -> Deck:
+    """Presentación sola (lee las notas), guion solo, o ambas (el guion manda y la presentación pone las imágenes)."""
     from pptx import Presentation
 
+    if guion_path:
+        return _load_with_guion(path, guion_path, cache_dir, render)
     path = path or default_deck_path()
     prs = Presentation(path)
     slides = list(prs.slides)
     is_default = os.path.abspath(path) == os.path.abspath(default_deck_path()) or (
         os.path.exists(default_deck_path()) and file_hash(path) == file_hash(default_deck_path()))
 
-    images = [None] * len(slides)
-    if is_default:
-        images = [p if os.path.exists(p) else None for p in _bundled_images(len(slides))]
-    elif render:
-        cache_dir = cache_dir or os.path.join(tempfile.gettempdir(), "EnsayoPitch")
-        outdir = os.path.join(cache_dir, "laminas", file_hash(path))
-        got = None
-        if os.path.isdir(outdir) and os.listdir(outdir):
-            got = [os.path.join(outdir, f) for f in sorted(os.listdir(outdir))]
-            got = sorted(got, key=lambda p: int(re.search(r"(\d+)\.", os.path.basename(p)).group(1)))
-            if len(got) < len(slides):
-                got = None
-        if got is None:
-            got = export_with_powerpoint(path, outdir, len(slides))
-        if got:
-            images = got
+    images = _slide_images(path, slides, is_default, cache_dir, render)
 
     sections = []
     for i, slide in enumerate(slides, start=1):
@@ -185,5 +212,33 @@ def load_deck(path: Optional[str] = None, cache_dir: Optional[str] = None, rende
         sec.keywords = (curated.KEYWORDS.get(i) if is_default else None) or textmatch.auto_keywords(text)
         sections.append(sec)
     if not sections:
-        raise ValueError("No encontré notas con el formato «NOMBRE (25 s). texto» en esta presentación.")
-    return Deck(path=path, sections=sections)
+        raise ValueError("No encontré notas con el formato «NOMBRE (25 s). texto» en esta presentación. "
+                         "Si tienes el guion aparte, cárgalo con «Guion…».")
+    return Deck(path=path, sections=sections, is_default=is_default)
+
+
+def _load_with_guion(pptx_path, guion_path, cache_dir, render) -> Deck:
+    from . import guion
+
+    entries = guion.load(guion_path)
+    titles, images = {}, {}
+    if pptx_path:
+        from pptx import Presentation
+        slides = list(Presentation(pptx_path).slides)
+        for i, sl in enumerate(slides, start=1):
+            titles[i] = _slide_title(sl)
+        for i, img in enumerate(_slide_images(pptx_path, slides, False, cache_dir, render), start=1):
+            images[i] = img
+    sections = []
+    for e in entries:
+        speaker = pretty_name(e.speaker) if e.speaker.isupper() else " ".join(e.speaker.split())
+        text = clean_spoken(e.text)
+        kws = [textmatch.label_keyword(k) for k in e.keywords] or textmatch.auto_keywords(text)
+        title = titles.get(e.slide) or (text[:110] + ("…" if len(text) > 110 else ""))
+        sec = Section(index=len(sections), slide_no=e.slide, speaker=speaker, target_s=e.secs, text=text,
+                      raw_notes=e.text, title=title, image=images.get(e.slide),
+                      has_pause=bool(re.search(r"\(pausa\)", e.text, re.I)))
+        sec.tail = textmatch.tail_words(text, 6)
+        sec.keywords = kws
+        sections.append(sec)
+    return Deck(path=pptx_path or "", sections=sections, guion=guion_path)

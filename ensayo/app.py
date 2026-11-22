@@ -12,9 +12,10 @@ from PySide6.QtWidgets import (QApplication, QButtonGroup, QCheckBox, QComboBox,
 
 from . import audio, report, storage
 from .deck import asset_dir, load_deck
-from .session import SOLO, TEAM, TOTAL_MAX, TOTAL_MIN, Rehearsal, diff_label, fmt
+from .session import SOLO, TEAM, Rehearsal, diff_label, fmt
 
 APP_NAME = "Ensayo Pitch"
+APP_VERSION = "2.0"
 TEAM_PROFILE = "__equipo__"
 
 PALETTE = ["#b5652b", "#3f6e8c", "#5b8a3c", "#8c4f7a", "#c29a2b", "#4f5d6b", "#a14a3b", "#2f7d73"]
@@ -210,7 +211,9 @@ class Voices:
 # ------------------------------------------------------------------ inicio
 class HomePage(QWidget):
     start_requested = Signal()
-    deck_change = Signal(str)
+    pick_pptx = Signal(str)
+    pick_guion = Signal(str)
+    reset_team = Signal()
     device_change = Signal(object)
 
     def __init__(self, win):
@@ -223,17 +226,20 @@ class HomePage(QWidget):
 
         top = QHBoxLayout()
         tl = QVBoxLayout()
-        tl.addWidget(label("Ensayo del pitch", "h1"))
+        tl.addWidget(label(f"Ensayo del pitch <span style='font-size:13px;color:#b5652b'>v{APP_VERSION}</span>", "h1"))
         self.deck_lbl = label("", "muted")
         tl.addWidget(self.deck_lbl)
         top.addLayout(tl)
         top.addStretch()
-        b = QPushButton("Cambiar presentación…")
-        b.clicked.connect(self._pick_deck)
-        top.addWidget(b)
-        b2 = QPushButton("Usar la del equipo")
-        b2.clicked.connect(lambda: self.deck_change.emit(""))
-        top.addWidget(b2)
+        for txt, tip, fn in (
+                ("Presentación…", "Cargar un PowerPoint (.pptx). Si las notas traen el guion, basta con eso.", self._pick_deck),
+                ("Guion…", "Cargar el guion en la plantilla de Word (.docx) o de texto (.txt).", self._pick_guion),
+                ("Plantilla del guion…", "Guardar la plantilla para escribir el guion de otra presentación.", self._save_template),
+                ("Pitch del equipo", "Volver al pitch del BioBloque.", lambda: self.reset_team.emit())):
+            b = QPushButton(txt)
+            b.setToolTip(tip)
+            b.clicked.connect(fn)
+            top.addWidget(b)
         root.addLayout(top)
 
         body = QHBoxLayout()
@@ -353,11 +359,16 @@ class HomePage(QWidget):
     # perfiles
     def set_deck(self, deck, last_profile=None):
         self.deck = deck
-        self.deck_lbl.setText(f"{os.path.basename(deck.path)} · {len(deck.sections)} partes · meta {fmt(deck.total_target)}")
+        src = "pitch del equipo" if deck.is_default else " + ".join(
+            os.path.basename(x) for x in (deck.path, deck.guion) if x)
+        self.deck_lbl.setText(f"{src} · {len(deck.sections)} partes · meta {fmt(deck.total_target)} "
+                              f"(rango {fmt(deck.min_total)}–{fmt(deck.max_total)})")
         while self.prof_box.count():
             w = self.prof_box.takeAt(0).widget()
             if w:
                 self.prof_group.removeButton(w)
+                w.hide()
+                w.setParent(None)
                 w.deleteLater()
         names = deck.speakers + [TEAM_PROFILE]
         chosen = None
@@ -399,7 +410,7 @@ class HomePage(QWidget):
             rows = "".join(
                 f"<tr><td style='color:#776d63;padding-right:10px'>{s.slide_no}</td>"
                 f"<td style='color:{self.win.color_for(s.speaker)};font-weight:600;padding-right:10px'>{s.speaker}</td>"
-                f"<td style='padding-right:10px'>{s.target_s} s</td><td>{s.text[:80]}…</td></tr>" for s in self.deck.sections)
+                f"<td style='padding-right:10px'>{s.target_s} s</td><td>{s.text[:80] + ('…' if len(s.text) > 80 else '')}</td></tr>" for s in self.deck.sections)
             self.info.setText(f"<table cellspacing=3>{rows}</table>")
         else:
             mine = [s for s in self.deck.sections if s.speaker == p]
@@ -423,7 +434,34 @@ class HomePage(QWidget):
     def _pick_deck(self):
         path, _ = QFileDialog.getOpenFileName(self, "Elegir presentación", "", "PowerPoint (*.pptx)")
         if path:
-            self.deck_change.emit(path)
+            self.pick_pptx.emit(path)
+
+    def _pick_guion(self):
+        path, _ = QFileDialog.getOpenFileName(self, "Elegir guion", "", "Guion (*.docx *.txt)")
+        if path:
+            self.pick_guion.emit(path)
+
+    def _save_template(self):
+        import shutil
+        src_dir = os.path.join(asset_dir(), "plantillas")
+        docs = os.path.join(os.path.expanduser("~"), "Documents")
+        path, filt = QFileDialog.getSaveFileName(
+            self, "Guardar plantilla del guion", os.path.join(docs if os.path.isdir(docs) else "", "Guion_del_pitch.docx"),
+            "Word (*.docx);;Texto (*.txt);;Ejemplo relleno con el pitch del equipo (*.docx)")
+        if not path:
+            return
+        if filt.startswith("Ejemplo"):
+            src = "Guion_ejemplo_FireProof.docx"
+        elif filt.startswith("Texto") or path.lower().endswith(".txt"):
+            src = "Plantilla_Guion.txt"
+            if not path.lower().endswith(".txt"):
+                path += ".txt"
+        else:
+            src = "Plantilla_Guion.docx"
+            if not path.lower().endswith(".docx"):
+                path += ".docx"
+        shutil.copyfile(os.path.join(src_dir, src), path)
+        QDesktopServices.openUrl(QUrl.fromLocalFile(path))
 
 
 # ------------------------------------------------------------------ ensayo
@@ -678,7 +716,7 @@ class SessionPage(QWidget):
         self.bar.setValue(int(min(1.0, frac) * 100))
         self.bar.setStyleSheet(f"QProgressBar::chunk{{background:{col};border-radius:5px}}")
         tot = self.reh.total_elapsed(now)
-        self.total.setText(f"Total del pitch: {fmt(tot)} de {fmt(self.reh.deck.total_target)}  (rango {fmt(TOTAL_MIN)}–{fmt(TOTAL_MAX)})")
+        self.total.setText(f"Total del pitch: {fmt(tot)} de {fmt(self.reh.deck.total_target)}  (rango {fmt(self.reh.deck.min_total)}–{fmt(self.reh.deck.max_total)})")
         if r.by_machine:
             self.voice_lbl.setText("Micrófono en pausa mientras habla el PC")
         else:
@@ -771,7 +809,7 @@ class ReportPage(QWidget):
         if previous:
             prev = f" · la vez anterior: {fmt(previous['total'])}"
         self.big.setText(f"<span style='font-size:48px;font-weight:700;color:{verdict[1]}'>{fmt(summary['total'])}</span>"
-                         f"&nbsp;&nbsp;<span style='font-size:18px'>{verdict[0]} (meta {fmt(TOTAL_MIN)}–{fmt(TOTAL_MAX)}){prev}</span>")
+                         f"&nbsp;&nbsp;<span style='font-size:18px'>{verdict[0]} (meta {fmt(summary['min_total'])}–{fmt(summary['max_total'])}){prev}</span>")
         mine = next((d for d in summary["speakers"] if d["speaker"] == prof), None)
         if mine:
             self.sub.setText(f"Tus partes: <b>{fmt(mine['real'])}</b> de {fmt(mine['target'])} "
@@ -823,7 +861,7 @@ class ReportPage(QWidget):
 class MainWindow(QMainWindow):
     def __init__(self):
         super().__init__()
-        self.setWindowTitle(APP_NAME)
+        self.setWindowTitle(f"{APP_NAME} {APP_VERSION}")
         self.resize(1280, 800)
         self.settings = storage.settings()
         self.voices = Voices()
@@ -840,7 +878,9 @@ class MainWindow(QMainWindow):
             self.stack.addWidget(p)
 
         self.home.start_requested.connect(self.start)
-        self.home.deck_change.connect(self.change_deck)
+        self.home.pick_pptx.connect(self.on_pick_pptx)
+        self.home.pick_guion.connect(self.on_pick_guion)
+        self.home.reset_team.connect(lambda: self.load_material("", "", quiet=False))
         self.home.device_change.connect(self.restart_audio)
         self.sess.done.connect(self.show_report)
         self.rep.again.connect(self.start)
@@ -867,7 +907,9 @@ class MainWindow(QMainWindow):
         self.home.mic.blockSignals(False)
 
         deck_path = self.settings.get("deck") or ""
-        self.change_deck(deck_path if deck_path and os.path.exists(deck_path) else "", quiet=True)
+        guion_path = self.settings.get("guion") or ""
+        self.load_material(deck_path if deck_path and os.path.exists(deck_path) else "",
+                           guion_path if guion_path and os.path.exists(guion_path) else "", quiet=True)
         self.restart_audio(self.home.mic.currentData())
 
     def color_for(self, name):
@@ -878,16 +920,35 @@ class MainWindow(QMainWindow):
         return self._colors[name]
 
     # presentación
-    def change_deck(self, path, quiet=False):
+    def on_pick_pptx(self, path):
+        guion = ""
+        cur = getattr(self, "deck", None)
+        if cur is not None and cur.guion:
+            r = QMessageBox.question(
+                self, APP_NAME, f"¿Usar el guion que ya cargaste ({os.path.basename(cur.guion)}) con esta presentación?\n\n"
+                "Sí: el guion pone el texto y los tiempos, y la presentación las imágenes.\n"
+                "No: se leen las notas del orador de la presentación.")
+            if r == QMessageBox.Yes:
+                guion = cur.guion
+        self.load_material(path, guion)
+
+    def on_pick_guion(self, path):
+        cur = getattr(self, "deck", None)
+        pptx = cur.path if cur is not None and not cur.is_default and cur.path else ""
+        self.load_material(pptx, path)
+
+    def load_material(self, pptx, guion, quiet=False):
+        """pptx y guion vacíos = pitch del equipo."""
         try:
             QApplication.setOverrideCursor(Qt.WaitCursor)
-            deck = load_deck(path or None, cache_dir=storage.data_dir())
+            deck = load_deck(pptx or None, cache_dir=storage.data_dir(), guion_path=guion or None)
         except Exception as e:
             QApplication.restoreOverrideCursor()
             if not quiet:
-                QMessageBox.warning(self, APP_NAME, f"No pude leer esa presentación.\n\n{e}")
+                QMessageBox.warning(self, APP_NAME, f"No pude leer {'el guion' if guion else 'esa presentación'}.\n\n{e}")
             if not hasattr(self, "deck"):
                 deck = load_deck(None, cache_dir=storage.data_dir())
+                pptx = guion = ""
             else:
                 return
         QApplication.restoreOverrideCursor()
@@ -895,11 +956,17 @@ class MainWindow(QMainWindow):
         self._colors = {}
         for sp in deck.speakers:
             self.color_for(sp)
-        storage.save_settings(deck=path)
+        storage.save_settings(deck=pptx, guion=guion)
         self.home.set_deck(deck, self.settings.get("profile"))
-        if path and not any(s.image for s in deck.sections) and not quiet:
-            QMessageBox.information(self, APP_NAME, "Leí las notas, pero no pude sacar las imágenes de las láminas "
-                                    "(para eso se necesita PowerPoint instalado). Se mostrará el título de cada lámina.")
+        if quiet:
+            return
+        if pptx and not any(s.image for s in deck.sections):
+            QMessageBox.information(self, APP_NAME, "No pude sacar las imágenes de las láminas (para eso se necesita "
+                                    "PowerPoint instalado). Se mostrará el título o el comienzo del texto de cada parte.")
+        elif guion and not pptx:
+            QMessageBox.information(self, APP_NAME, f"Guion cargado: {len(deck.sections)} partes, "
+                                    f"{len(deck.speakers)} personas, meta {fmt(deck.total_target)}.\n\n"
+                                    "Si quieres ver las láminas mientras ensayas, carga también la presentación.")
 
     # audio
     def restart_audio(self, device):

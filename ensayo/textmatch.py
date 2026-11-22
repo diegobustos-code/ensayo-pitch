@@ -143,3 +143,21 @@ def auto_keywords(text: str, max_words: int = 4):
         labels.add(lab.lower())
         out.append((lab, alts))
     return out[:8]
+
+
+def label_keyword(label: str):
+    """Punto clave escrito por la persona en el guion: se acepta la frase completa,
+    sus cifras en palabras o cualquiera de sus palabras con más contenido."""
+    alts = []
+    n = normalize(label)
+    if n:
+        alts.append(n)
+    toks = re.findall(r"\d[\d.,]*|[^\s\d]+", label)
+    for i, tok in enumerate(toks):
+        if re.match(r"^\d", tok):
+            nxt = toks[i + 1] if i + 1 < len(toks) else ""
+            alts.extend(sorted(number_forms(tok.rstrip(".,"), nxt)))
+    for w in n.split():
+        if len(w) >= 5 and w not in STOP and w not in alts:
+            alts.append(w)
+    return (label.strip(), alts or [label])

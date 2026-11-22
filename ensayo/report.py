@@ -4,7 +4,7 @@ import datetime as dt
 import html
 import os
 
-from .session import TOTAL_MAX, TOTAL_MIN, diff_label, fmt
+from .session import diff_label, fmt
 
 VERDICT = {"ok": ("Dentro del tiempo", "#2f7d4f"),
            "corto": ("Quedó corto", "#b7791f"),
@@ -93,7 +93,7 @@ th,td{{padding:8px 10px;text-align:left;border-bottom:1px solid #eee;font-size:1
 tr.mine td{{background:#fff6e5}} h2{{font-size:18px;margin:24px 0 10px}} li{{margin:4px 0}}
 </style></head><body><div class="wrap">
 <h1>Informe de ensayo · {esc(who)}</h1>
-<div class="sub">{mode} · {dt.datetime.now().strftime("%d-%m-%Y %H:%M")} · meta {fmt(TOTAL_MIN)}–{fmt(TOTAL_MAX)}</div>
+<div class="sub">{mode} · {dt.datetime.now().strftime("%d-%m-%Y %H:%M")} · meta {fmt(summary["min_total"])}–{fmt(summary["max_total"])} · {esc(summary.get("deck_name", ""))}</div>
 <div class="big">
 <div class="card">Tiempo total<b style="color:{vcol}">{fmt(summary["total"])}</b>{vtxt}</div>
 <div class="card">Meta del guion<b>{fmt(summary["target_total"])}</b>suma de las notas</div>

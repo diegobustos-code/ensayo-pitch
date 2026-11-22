@@ -63,6 +63,9 @@ private val PALETTE = intArrayOf(0xFFB5652B.toInt(), 0xFF3F6E8C.toInt(), 0xFF5B8
     0xFFC29A2B.toInt(), 0xFF4F5D6B.toInt(), 0xFFA14A3B.toInt(), 0xFF2F7D73.toInt())
 private const val TEAM_PROFILE = "__equipo__"
 private const val PICK_PPTX = 41
+private const val PICK_GUION = 42
+private const val SAVE_TEMPLATE = 43
+private const val APP_VERSION = "2.0"
 
 class LevelMeter(ctx: Context) : View(ctx) {
     private var db = -90.0
@@ -159,7 +162,8 @@ class MainActivity : Activity(), AudioListener {
         showScript = store.getBool("show_script", true)
         voiceIdx = store.getInt("voice", 0)
         speed = store.getInt("speed", 0)
-        loadDeck(store.getString("deck") == "custom", quiet = true)
+        if (store.getString("deck") == "custom") { store.put("has_pptx", true); store.put("pptx_name", store.getString("deck_name", "presentación")); store.put("deck", null) }
+        loadMaterial(quiet = true)
 
         audio = AudioEngine(this, this)
         audio.loadModel()
@@ -260,63 +264,145 @@ class MainActivity : Activity(), AudioListener {
     }
 
     // ---------------------------------------------------------------- presentación
-    private fun loadDeck(custom: Boolean, quiet: Boolean = false) {
+    private val pptxFile get() = File(filesDir, "custom.pptx")
+    private val guionFile get() = File(filesDir, "custom_guion.bin")
+
+    /** Carga lo que corresponda: guion (+ presentación), presentación sola o el pitch del equipo. */
+    private fun loadMaterial(quiet: Boolean = false) {
+        val hasP = store.getBool("has_pptx", false) && pptxFile.exists()
+        val hasG = store.getBool("has_guion", false) && guionFile.exists()
         try {
-            if (custom) {
-                val f = File(filesDir, "custom.pptx")
-                deck = DeckParser.load(f.readBytes(), store.getString("deck_name", "presentación") ?: "presentación", false)
-            } else {
-                val bytes = assets.open("default.pptx").use { it.readBytes() }
-                val slides = (assets.list("slides") ?: emptyArray()).toSet()
-                deck = DeckParser.load(bytes, "Pitch Fire Proof", true, { n ->
-                    val name = "s-%02d.jpg".format(n)
-                    if (name in slides) "slides/$name" else null
-                }, Curated.KEYWORDS)
+            deck = when {
+                hasG -> DeckParser.loadWithGuion(GuionParser.parse(guionFile.readBytes()),
+                    store.getString("guion_name", "guion") ?: "guion", if (hasP) pptxFile.readBytes() else null)
+                hasP -> DeckParser.load(pptxFile.readBytes(), store.getString("pptx_name", "presentación") ?: "presentación", false)
+                else -> loadTeamDeck()
             }
         } catch (e: Exception) {
-            if (!quiet) Toast.makeText(this, "No pude leer esa presentación: ${e.message}", Toast.LENGTH_LONG).show()
-            if (!this::deck.isInitialized || custom) {
-                store.put("deck", "default")
-                if (custom) loadDeck(false, true)
-                return
-            }
+            if (!quiet) Toast.makeText(this, "No pude leer ${if (hasG) "el guion" else "la presentación"}: ${e.message}", Toast.LENGTH_LONG).show()
+            store.put("has_pptx", false)
+            store.put("has_guion", false)
+            deck = loadTeamDeck()
         }
         colors.clear()
         deck.speakers.forEach { colorFor(it) }
         if (profile != null && profile !in deck.speakers) profile = null
     }
 
+    private fun loadTeamDeck(): Deck {
+        val bytes = assets.open("default.pptx").use { it.readBytes() }
+        val slides = (assets.list("slides") ?: emptyArray()).toSet()
+        return DeckParser.load(bytes, "Pitch Fire Proof", true, { n ->
+            val name = "s-%02d.jpg".format(n)
+            if (name in slides) "slides/$name" else null
+        }, Curated.KEYWORDS)
+    }
+
+    private fun displayName(uri: android.net.Uri): String {
+        try {
+            contentResolver.query(uri, arrayOf(android.provider.OpenableColumns.DISPLAY_NAME), null, null, null)?.use { c ->
+                if (c.moveToFirst()) return c.getString(0).substringBeforeLast('.')
+            }
+        } catch (_: Exception) {
+        }
+        return uri.lastPathSegment?.substringAfterLast('/')?.substringBeforeLast('.') ?: "archivo"
+    }
+
+    private var pendingTemplate = ""
+
     @Deprecated("Deprecated in Java")
     override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
         super.onActivityResult(requestCode, resultCode, data)
-        if (requestCode != PICK_PPTX || resultCode != RESULT_OK) return
+        if (resultCode != RESULT_OK) return
         val uri = data?.data ?: return
         try {
-            val bytes = contentResolver.openInputStream(uri)!!.use { it.readBytes() }
-            DeckParser.load(bytes, "x", false) // valida antes de guardar
-            File(filesDir, "custom.pptx").writeBytes(bytes)
-            val name = uri.lastPathSegment?.substringAfterLast('/') ?: "presentación"
-            store.put("deck", "custom")
-            store.put("deck_name", name)
-            loadDeck(true)
-            Toast.makeText(this, "Listo. En esta presentación se muestra el título de cada lámina en vez de la imagen.",
-                Toast.LENGTH_LONG).show()
+            when (requestCode) {
+                PICK_PPTX -> {
+                    val bytes = contentResolver.openInputStream(uri)!!.use { it.readBytes() }
+                    val name = displayName(uri)
+                    val hasG = store.getBool("has_guion", false) && guionFile.exists()
+                    fun usePptx(keepGuion: Boolean) {
+                        if (!keepGuion) DeckParser.load(bytes, name, false) // revisa que traiga notas
+                        pptxFile.writeBytes(bytes)
+                        store.put("has_pptx", true)
+                        store.put("pptx_name", name)
+                        store.put("has_guion", keepGuion)
+                        loadMaterial()
+                        Toast.makeText(this, "Presentación cargada. En el teléfono se muestra el título de cada lámina en vez de la imagen.", Toast.LENGTH_LONG).show()
+                        showHome()
+                    }
+                    if (hasG) {
+                        AlertDialog.Builder(this)
+                            .setTitle("¿Usar el guion que ya cargaste?")
+                            .setMessage("Guion: ${store.getString("guion_name", "")}\n\nSí: el guion pone el texto y los tiempos, y la presentación los títulos.\nNo: se leen las notas del orador de la presentación.")
+                            .setPositiveButton("Sí") { _, _ -> usePptx(true) }
+                            .setNegativeButton("No") { _, _ ->
+                                try { usePptx(false) } catch (e: Exception) {
+                                    Toast.makeText(this, "No pude leer esa presentación: ${e.message}", Toast.LENGTH_LONG).show()
+                                }
+                            }
+                            .show()
+                    } else usePptx(false)
+                    return
+                }
+                PICK_GUION -> {
+                    val bytes = contentResolver.openInputStream(uri)!!.use { it.readBytes() }
+                    val entries = GuionParser.parse(bytes)
+                    guionFile.writeBytes(bytes)
+                    store.put("has_guion", true)
+                    store.put("guion_name", displayName(uri))
+                    loadMaterial()
+                    val people = entries.map { it.speaker }.distinct().size
+                    Toast.makeText(this, "Guion cargado: ${entries.size} partes, $people personas, meta ${fmt(deck.totalTarget.toDouble())}.", Toast.LENGTH_LONG).show()
+                }
+                SAVE_TEMPLATE -> {
+                    val bytes = assets.open("plantillas/$pendingTemplate").use { it.readBytes() }
+                    contentResolver.openOutputStream(uri)!!.use { it.write(bytes) }
+                    Toast.makeText(this, "Plantilla guardada. Ábrela con Word, Google Docs o un editor de texto, rellénala y cárgala con «Guion».", Toast.LENGTH_LONG).show()
+                }
+            }
         } catch (e: Exception) {
-            Toast.makeText(this, "No pude leer esa presentación: ${e.message}", Toast.LENGTH_LONG).show()
+            Toast.makeText(this, "No pude leer ese archivo: ${e.message}", Toast.LENGTH_LONG).show()
         }
         showHome()
     }
 
-    private fun pickDeck() {
+    private fun openDoc(code: Int, mimes: Array<String>) {
         val i = Intent(Intent.ACTION_OPEN_DOCUMENT).apply {
             addCategory(Intent.CATEGORY_OPENABLE)
             type = "*/*"
-            putExtra(Intent.EXTRA_MIME_TYPES, arrayOf(
-                "application/vnd.openxmlformats-officedocument.presentationml.presentation",
-                "application/octet-stream"))
+            putExtra(Intent.EXTRA_MIME_TYPES, mimes)
         }
         @Suppress("DEPRECATION")
-        startActivityForResult(i, PICK_PPTX)
+        startActivityForResult(i, code)
+    }
+
+    private fun pickDeck() = openDoc(PICK_PPTX, arrayOf(
+        "application/vnd.openxmlformats-officedocument.presentationml.presentation", "application/octet-stream"))
+
+    private fun pickGuion() = openDoc(PICK_GUION, arrayOf(
+        "application/vnd.openxmlformats-officedocument.wordprocessingml.document", "text/plain", "application/octet-stream"))
+
+    private fun saveTemplate() {
+        val opts = arrayOf("Plantilla de Word (.docx)", "Plantilla de texto (.txt)", "Ejemplo relleno con el pitch del equipo (.docx)")
+        AlertDialog.Builder(this)
+            .setTitle("Plantilla del guion")
+            .setItems(opts) { _, which ->
+                val (asset, title, mime) = when (which) {
+                    1 -> Triple("Plantilla_Guion.txt", "Guion_del_pitch.txt", "text/plain")
+                    2 -> Triple("Guion_ejemplo_FireProof.docx", "Guion_ejemplo_FireProof.docx", "application/vnd.openxmlformats-officedocument.wordprocessingml.document")
+                    else -> Triple("Plantilla_Guion.docx", "Guion_del_pitch.docx", "application/vnd.openxmlformats-officedocument.wordprocessingml.document")
+                }
+                pendingTemplate = asset
+                val i = Intent(Intent.ACTION_CREATE_DOCUMENT).apply {
+                    addCategory(Intent.CATEGORY_OPENABLE)
+                    type = mime
+                    putExtra(Intent.EXTRA_TITLE, title)
+                }
+                @Suppress("DEPRECATION")
+                startActivityForResult(i, SAVE_TEMPLATE)
+            }
+            .show()
     }
 
     // ---------------------------------------------------------------- voz del teléfono
@@ -435,18 +521,23 @@ class MainActivity : Activity(), AudioListener {
         val head = hbox()
         head.addView(ImageView(this).apply { setImageResource(R.mipmap.ic_launcher) }, LinearLayout.LayoutParams(dp(52), dp(52)))
         val ht = vbox().apply { setPadding(dp(12), 0, 0, 0) }
-        ht.addView(tv("Ensayo del pitch", 24f, true))
-        ht.addView(tv("${deck.name} · ${deck.sections.size} partes · meta ${fmt(deck.totalTarget.toDouble())}", 13f, color = MUTED))
+        ht.addView(tv(html("Ensayo del pitch <small><font color='#b5652b'>v$APP_VERSION</font></small>"), 24f, true))
+        ht.addView(tv("${deck.name} · ${deck.sections.size} partes · meta ${fmt(deck.totalTarget.toDouble())} (rango ${fmt(deck.minTotal)}–${fmt(deck.maxTotal)})", 13f, color = MUTED))
         head.addView(ht)
         col.addView(head)
 
-        val deckRow = hbox()
-        deckRow.addView(button("Otra presentación…") { pickDeck() }, lp(0, top = 0, weight = 1f))
-        deckRow.addView(View(this), LinearLayout.LayoutParams(dp(8), 1))
-        deckRow.addView(button("Usar la del equipo") {
-            store.put("deck", "default"); loadDeck(false); showHome()
+        val r1 = hbox()
+        r1.addView(button("Presentación…") { pickDeck() }, lp(0, weight = 1f))
+        r1.addView(View(this), LinearLayout.LayoutParams(dp(8), 1))
+        r1.addView(button("Guion…") { pickGuion() }, lp(0, weight = 1f))
+        col.addView(r1, lp(top = 12))
+        val r2 = hbox()
+        r2.addView(button("Plantilla del guion…") { saveTemplate() }, lp(0, weight = 1f))
+        r2.addView(View(this), LinearLayout.LayoutParams(dp(8), 1))
+        r2.addView(button("Pitch del equipo") {
+            store.put("has_pptx", false); store.put("has_guion", false); loadMaterial(); showHome()
         }, lp(0, weight = 1f))
-        col.addView(deckRow, lp(top = 12))
+        col.addView(r2, lp(top = 8))
 
         // perfiles
         val pc = card()
@@ -809,7 +900,7 @@ class MainActivity : Activity(), AudioListener {
         sv.clock.text = html("<font color='${String.format("#%06X", 0xFFFFFF and col)}'>${fmt(el)}</font> <small><font color='#776d63'>/ ${fmt(tgt)}</font></small>")
         sv.bar.frac = min(1.0, frac)
         sv.bar.color = col
-        sv.total.text = "Total: ${fmt(r.totalElapsed(t))} de ${fmt(deck.totalTarget.toDouble())} (rango ${fmt(TOTAL_MIN)}–${fmt(TOTAL_MAX)})"
+        sv.total.text = "Total: ${fmt(r.totalElapsed(t))} de ${fmt(deck.totalTarget.toDouble())} (rango ${fmt(deck.minTotal)}–${fmt(deck.maxTotal)})"
         sv.voice.text = if (run.byMachine) "Micrófono en pausa mientras habla el teléfono"
         else "Con voz ${"%.0f".format(run.voiced)} s" + if (run.silenceNow >= 1.5 && run.spokeOnce) " · silencio ${"%.0f".format(run.silenceNow)} s" else ""
     }
@@ -882,7 +973,7 @@ class MainActivity : Activity(), AudioListener {
             else -> "Se pasaron del tiempo" to RED
         }
         col.addView(tv(fmt(total), 56f, true, vcol), lp(top = 4))
-        col.addView(tv("$vtxt (meta ${fmt(TOTAL_MIN)}–${fmt(TOTAL_MAX)})" + (prevTotal?.let { " · la vez anterior: ${fmt(it)}" } ?: ""), 15f))
+        col.addView(tv("$vtxt (meta ${fmt(r.deck.minTotal)}–${fmt(r.deck.maxTotal)})" + (prevTotal?.let { " · la vez anterior: ${fmt(it)}" } ?: ""), 15f))
         val mine = r.perSpeaker().firstOrNull { it.speaker == prof }
         if (mine != null) {
             col.addView(tv(html("Tus partes: <b>${fmt(mine.real)}</b> de ${fmt(mine.target.toDouble())} (${diffLabel(mine.real, mine.target.toDouble())}) · puntos clave ${mine.kwHit}/${mine.kwTotal}"), 14f), lp(top = 8))

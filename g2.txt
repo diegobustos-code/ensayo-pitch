@@ -1,0 +1,15 @@
+Quién habla: Ana Rojas
+Segundos: 40
+Puntos clave: problema; 30 %
+Lo que dice:
+Hola, somos el equipo Verde y hoy les contamos el problema del agua.
+---
+Quién habla: Bruno Soto
+Segundos: 50
+Lo que dice:
+Nuestra solución reduce el consumo en un 30 por ciento en cada casa.
+---
+Quién habla: Ana Rojas
+Segundos: 30
+Lo que dice:
+Gracias por escucharnos.

@@ -26,6 +26,9 @@ data class Section(
 class Deck(val name: String, val sections: List<Section>, val isDefault: Boolean) {
     val speakers: List<String> get() = sections.map { it.speaker }.distinct()
     val totalTarget: Int get() = sections.sumOf { it.targetS }
+    /** Rango aceptable: hasta 10 % menos que la meta y 5 s de más (5:00 -> 4:30-5:05). */
+    val minTotal: Double get() = Math.round(totalTarget * 0.9).toDouble()
+    val maxTotal: Double get() = totalTarget + 5.0
     fun targetFor(sp: String) = sections.filter { it.speaker == sp }.sumOf { it.targetS }
 }
 
@@ -159,6 +162,21 @@ object DeckParser {
         return best.take(140)
     }
 
+    fun titlesOf(bytes: ByteArray): Map<Int, String> {
+        val files = unzip(bytes)
+        val presRels = rels(files, "ppt/presentation.xml")
+        val pres = xml(files["ppt/presentation.xml"] ?: return emptyMap())
+        val ids = pres.getElementsByTagNameNS(P, "sldId")
+        val out = HashMap<Int, String>()
+        for (i in 0 until ids.length) {
+            val rid = (ids.item(i) as Element).getAttributeNS(R, "id")
+            val path = presRels[rid] ?: continue
+            val x = files[path] ?: continue
+            out[i + 1] = slideTitle(xml(x))
+        }
+        return out
+    }
+
     /**
      * Lee un .pptx. [imageFor] da la imagen de cada lámina (o null).
      * [curated] reemplaza los puntos clave automáticos cuando es la presentación del equipo.
@@ -188,9 +206,29 @@ object DeckParser {
                 )
             )
         }
-        require(sections.isNotEmpty()) { "No encontré notas con el formato «NOMBRE (25 s). texto» en esta presentación." }
+        require(sections.isNotEmpty()) { "No encontré notas con el formato «NOMBRE (25 s). texto» en esta presentación. Si tienes el guion aparte, cárgalo con «Guion»." }
         return Deck(name, sections, isDefault)
     }
+}
+
+/** Títulos de cada lámina de un .pptx (número de lámina -> título). */
+fun DeckParser.slideTitles(bytes: ByteArray): Map<Int, String> = titlesOf(bytes)
+
+/** Guion (y opcionalmente la presentación para los títulos). */
+fun DeckParser.loadWithGuion(entries: List<GuionEntry>, name: String, pptx: ByteArray?): Deck {
+    val titles = if (pptx != null) titlesOf(pptx) else emptyMap()
+    val sections = entries.mapIndexed { i, e ->
+        val speaker = if (e.speaker == e.speaker.uppercase()) prettyName(e.speaker) else e.speaker.trim().split(Regex("\\s+")).joinToString(" ")
+        val text = cleanSpoken(e.text)
+        val kws = if (e.keywords.isNotEmpty()) e.keywords.map { labelKeyword(it) } else TextMatch.autoKeywords(text)
+        Section(
+            index = i, slideNo = e.slide, speaker = speaker, targetS = e.secs, text = text,
+            title = titles[e.slide] ?: (text.take(110) + if (text.length > 110) "…" else ""),
+            image = null, tail = TextMatch.tailWords(text, 6), keywords = kws,
+            hasPause = Regex("\\(pausa\\)", RegexOption.IGNORE_CASE).containsMatchIn(e.text),
+        )
+    }
+    return Deck(name, sections, false)
 }
 
 /** Puntos clave escogidos a mano para la presentación del equipo. */
