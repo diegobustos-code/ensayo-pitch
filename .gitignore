@@ -5,3 +5,8 @@ dist/
 model/
 *.spec
 .pytest_cache/
+android/.gradle/
+android/build/
+android/app/build/
+android/app/src/main/assets/
+android/local.properties

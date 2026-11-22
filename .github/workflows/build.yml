@@ -1,4 +1,4 @@
-name: Compilar app para Windows
+name: Compilar apps (Windows y Android)
 
 on:
   push:
@@ -54,7 +54,6 @@ jobs:
         run: |
           $p = Start-Process dist/EnsayoPitch/EnsayoPitch.exe -ArgumentList "--selftest","selftest.json" -PassThru -Wait
           Get-Content selftest.json
-          # en el servidor no hay micrófono ni tarjeta de sonido: PortAudio puede quejarse, el resto tiene que estar bien
           $r = Get-Content selftest.json | ConvertFrom-Json
           if ($r.vosk -ne "ok") { throw "El modelo de voz no cargó" }
           if ($r.deck.sections -ne 13) { throw "No se leyó bien la presentación" }
@@ -65,19 +64,66 @@ jobs:
 
       - uses: actions/upload-artifact@v4
         with:
-          name: EnsayoPitch-Windows
+          name: windows
           path: EnsayoPitch-Windows.zip
 
-      - name: Publicar versión
-        if: github.ref_type == 'branch' && github.ref_name == 'main' || startsWith(github.ref, 'refs/tags/')
-        uses: softprops/action-gh-release@v2
+  android:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: "8.9"
+
+      - name: Copiar presentación, láminas y modelo de voz a la app
+        run: |
+          A=android/app/src/main/assets
+          mkdir -p $A/slides
+          cp ensayo/assets/default.pptx $A/
+          cp ensayo/assets/slides/*.jpg $A/slides/
+          curl -sSL -o model.zip https://alphacephei.com/vosk/models/vosk-model-small-es-0.42.zip
+          unzip -q model.zip
+          mv vosk-model-small-es-0.42 $A/model-es
+          echo "vosk-model-small-es-0.42" > $A/model-es/uuid
+          du -sh $A/model-es
+
+      - name: Pruebas y compilación
+        run: gradle -p android --no-daemon testDebugUnitTest assembleRelease
+
+      - name: Renombrar APK
+        run: cp android/app/build/outputs/apk/release/app-release.apk EnsayoPitch-Android.apk
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: android
+          path: EnsayoPitch-Android.apk
+
+  publicar:
+    needs: [windows, android]
+    runs-on: ubuntu-latest
+    if: github.ref_type == 'branch' && github.ref_name == 'main' || startsWith(github.ref, 'refs/tags/')
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          path: out
+      - uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ startsWith(github.ref, 'refs/tags/') && github.ref_name || format('build-{0}', github.run_number) }}
           name: ${{ startsWith(github.ref, 'refs/tags/') && github.ref_name || format('Ensayo Pitch (compilación {0})', github.run_number) }}
           files: |
-            EnsayoPitch-Windows.zip
+            out/windows/EnsayoPitch-Windows.zip
+            out/android/EnsayoPitch-Android.apk
             docs/Tutorial_Ensayo_Pitch.pdf
           body: |
-            Descarga **EnsayoPitch-Windows.zip**, descomprímelo y abre `EnsayoPitch.exe`.
+            **Windows:** descarga **EnsayoPitch-Windows.zip**, descomprímelo y abre `EnsayoPitch.exe`. Si sale "Windows protegió su PC": *Más información* → *Ejecutar de todas formas*.
+
+            **Android:** descarga **EnsayoPitch-Android.apk** desde el teléfono y ábrelo. Si pide permiso para instalar apps de origen desconocido, actívalo para tu navegador o para Archivos.
+
             El paso a paso con dibujos está en **Tutorial_Ensayo_Pitch.pdf**.
-            Windows puede mostrar "Windows protegió su PC": haz clic en *Más información* → *Ejecutar de todas formas*.
