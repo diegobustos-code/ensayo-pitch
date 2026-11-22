@@ -1,6 +1,6 @@
 # Ensayo Pitch · Fire Proof
 
-App para Windows para ensayar el pitch del BioBloque. Cada uno elige su perfil, habla frente al PC y al final ve cuánto se demoró en cada parte.
+App para Windows y Android para ensayar el pitch del BioBloque. Cada uno elige su perfil, habla frente al PC y al final ve cuánto se demoró en cada parte.
 
 ## Descargar
 
@@ -13,6 +13,15 @@ App para Windows para ensayar el pitch del BioBloque. Cada uno elige su perfil, 
 La primera vez Windows puede mostrar "Windows protegió su PC". Pasa porque la app no tiene firma digital (cuesta plata). Haz clic en **Más información** y después en **Ejecutar de todas formas**.
 
 No necesita internet. El reconocimiento de voz va incluido y funciona sin conexión.
+
+### En Android
+
+1. Desde el teléfono, entra a **Releases** y baja `EnsayoPitch-Android.apk` (unos 85 MB).
+2. Ábrelo desde las descargas. Si el teléfono dice que no puede instalar apps de origen desconocido, toca **Configuración** y activa **Permitir de esta fuente** para tu navegador o para Archivos. Después vuelve y toca **Instalar**.
+3. Si aparece Play Protect avisando que la app no es conocida, toca **Más detalles** → **Instalar de todas formas**.
+4. La primera vez que la abras, acepta el permiso del micrófono. El reconocimiento de voz tarda unos segundos en prepararse solo esa vez.
+
+Las versiones nuevas se instalan encima de la anterior y no se pierde el historial.
 
 ## Cómo se usa
 
