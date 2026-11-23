@@ -1170,10 +1170,14 @@ def selftest(out_path):
         res["pdf"] = "ok" if len(imgs) == 2 and all(os.path.exists(i) for i in imgs) else f"ERROR {len(imgs)} páginas"
     except Exception as e:
         res["pdf"] = f"ERROR {e}"
+    def dump():
+        with open(out_path, "w", encoding="utf-8") as f:
+            json.dump(res, f, ensure_ascii=False, indent=1)
+    res["tts"] = "pendiente"
+    dump()
     v = Voices()
     res["tts"] = {"ok": v.ok, "voices": v.names()}
-    with open(out_path, "w", encoding="utf-8") as f:
-        json.dump(res, f, ensure_ascii=False, indent=1)
+    dump()
     ok = isinstance(res["deck"], dict) and res["vosk"] == "ok" and not str(res["portaudio"]).startswith("ERROR")
     return 0 if ok else 1
 

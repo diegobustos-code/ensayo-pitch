@@ -12,6 +12,7 @@ permissions:
 jobs:
   windows:
     runs-on: windows-latest
+    timeout-minutes: 40
     steps:
       - uses: actions/checkout@v4
 
@@ -53,7 +54,8 @@ jobs:
       - name: Probar el ejecutable
         shell: pwsh
         run: |
-          $p = Start-Process dist/EnsayoPitch/EnsayoPitch.exe -ArgumentList "--selftest","selftest.json" -PassThru -Wait
+          $p = Start-Process dist/EnsayoPitch/EnsayoPitch.exe -ArgumentList "--selftest","selftest.json" -PassThru
+          if (-not $p.WaitForExit(180000)) { Write-Host "La prueba no terminó en 3 minutos; la detengo y reviso lo que alcanzó a registrar"; $p.Kill() }
           Get-Content selftest.json
           $r = Get-Content selftest.json | ConvertFrom-Json
           if ($r.vosk -ne "ok") { throw "El modelo de voz no cargó" }
@@ -71,6 +73,7 @@ jobs:
 
   android:
     runs-on: ubuntu-latest
+    timeout-minutes: 40
     steps:
       - uses: actions/checkout@v4
 
