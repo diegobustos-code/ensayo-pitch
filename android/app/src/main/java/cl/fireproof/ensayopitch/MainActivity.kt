@@ -31,6 +31,7 @@ import android.view.ViewGroup
 import android.view.WindowManager
 import android.widget.AdapterView
 import android.widget.ArrayAdapter
+import android.widget.CheckBox
 import android.widget.FrameLayout
 import android.widget.ImageView
 import android.widget.LinearLayout
@@ -65,7 +66,7 @@ private const val TEAM_PROFILE = "__equipo__"
 private const val PICK_PPTX = 41
 private const val PICK_GUION = 42
 private const val SAVE_TEMPLATE = 43
-private const val APP_VERSION = "2.0"
+private const val APP_VERSION = "2.1"
 
 class LevelMeter(ctx: Context) : View(ctx) {
     private var db = -90.0
@@ -121,6 +122,7 @@ class MainActivity : Activity(), AudioListener {
     private var showScript = true
     private var voiceIdx = 0
     private var speed = 0
+    private val absent = linkedSetOf<String>()   // los que faltan hoy (ensayo del equipo)
 
     // vistas vivas
     private var meter: LevelMeter? = null
@@ -161,6 +163,7 @@ class MainActivity : Activity(), AudioListener {
         autoAdvance = store.getBool("auto", true)
         showScript = store.getBool("show_script", true)
         voiceIdx = store.getInt("voice", 0)
+        absent.addAll((store.getString("absent", "") ?: "").split("|").filter { it.isNotEmpty() })
         speed = store.getInt("speed", 0)
         if (store.getString("deck") == "custom") { store.put("has_pptx", true); store.put("pptx_name", store.getString("deck_name", "presentación")); store.put("deck", null) }
         loadMaterial(quiet = true)
@@ -636,6 +639,22 @@ class MainActivity : Activity(), AudioListener {
         }
         mc.addView(modeItem(TEAM, "Ensayo del equipo", "Todos hablan frente al teléfono. El reloj corre sin parar y mide cuánto se demora cada uno.", true), lp(top = 8))
         mc.addView(modeItem(SOLO, "Ensayo individual", "Tú dices tus partes y el teléfono lee las de tus compañeros, así practicas los cambios de turno.", profile != null), lp(top = 8))
+        if (mode == TEAM) {
+            mc.addView(tv("¿Quiénes están hoy? Desmarca a los que faltan: el teléfono lee sus partes.", 14f, true), lp(top = 12))
+            var wrow: LinearLayout? = null
+            deck.speakers.forEachIndexed { i, sp ->
+                if (i % 2 == 0) { wrow = hbox(); mc.addView(wrow, lp(top = 2)) }
+                val cb = CheckBox(this).apply {
+                    text = sp
+                    textSize = 14f
+                    setTextColor(INK)
+                    isChecked = sp !in absent
+                    setOnCheckedChangeListener { _, c -> if (c) absent.remove(sp) else absent.add(sp); store.put("absent", absent.joinToString("|")) }
+                }
+                wrow!!.addView(cb, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
+            }
+            if (deck.speakers.size % 2 == 1) wrow!!.addView(View(this), LinearLayout.LayoutParams(0, 1, 1f))
+        }
         col.addView(mc, lp(top = 14))
 
         // opciones
@@ -757,7 +776,9 @@ class MainActivity : Activity(), AudioListener {
         store.put("voice", voiceIdx)
         store.put("speed", speed)
         if (mode == SOLO && profile == null) mode = TEAM
-        reh = Rehearsal(deck, mode, profile, autoAdvance)
+        absent.retainAll(deck.speakers.toSet())
+        val present = if (mode == TEAM && absent.isNotEmpty()) deck.speakers.filter { it !in absent }.toSet() else null
+        reh = Rehearsal(deck, mode, profile, autoAdvance, present)
         heard.setLength(0)
         partial = ""
         shownIdx = -1
@@ -877,7 +898,8 @@ class MainActivity : Activity(), AudioListener {
         sv.slideLbl.text = "Lámina ${s.slideNo} · parte ${s.index + 1} de ${r.runs.size} · meta ${s.targetS} s"
         when {
             run.byMachine -> {
-                sv.badge.text = "EL TELÉFONO LEE ESTA PARTE · escucha y prepárate"
+                sv.badge.text = if (r.mode == TEAM) "FALTA ${s.speaker.uppercase()} · EL TELÉFONO LEE SU PARTE"
+                    else "EL TELÉFONO LEE ESTA PARTE · escucha y prepárate"
                 sv.badge.setTextColor(INK)
                 sv.badge.background = rounded(0xFFEBE5DC.toInt(), 6f)
             }
@@ -1024,6 +1046,7 @@ class MainActivity : Activity(), AudioListener {
         }
         col.addView(tv(fmt(total), 56f, true, vcol), lp(top = 4))
         col.addView(tv("$vtxt (meta ${fmt(r.deck.minTotal)}–${fmt(r.deck.maxTotal)})" + (prevTotal?.let { " · la vez anterior: ${fmt(it)}" } ?: ""), 15f))
+        if (r.absent.isNotEmpty()) col.addView(tv("Faltó ${r.absent.joinToString(", ")}: sus partes las leyó el teléfono.", 14f, color = MUTED), lp(top = 4))
         val mine = r.perSpeaker().firstOrNull { it.speaker == prof }
         if (mine != null) {
             col.addView(tv(html("Tus partes: <b>${fmt(mine.real)}</b> de ${fmt(mine.target.toDouble())} (${diffLabel(mine.real, mine.target.toDouble())}) · puntos clave ${mine.kwHit}/${mine.kwTotal}"), 14f), lp(top = 8))

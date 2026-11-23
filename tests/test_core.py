@@ -164,3 +164,25 @@ def test_pdf_con_guion(tmp_path):
     import pytest
     with pytest.raises(ValueError):
         load_deck(pdf, render=False)
+
+
+def test_equipo_con_ausentes():
+    d = load_deck(render=False)
+    presentes = set(d.speakers) - {"Bastián", "Daniel"}
+    reh = Rehearsal(d, mode=TEAM, present=presentes)
+    reh.start(0.0)
+    t = 0.0
+    lectores = []
+    for s in d.sections:
+        r = reh.current
+        if r.by_machine:
+            lectores.append(s.speaker)
+            t += s.target_s
+            reh.advance(t, "voz-pc")
+        else:
+            t = _run(reh, t, s.target_s * 0.9, text=s.text)
+            t = _run(reh, t, 1.0, voiced=False)
+    assert reh.finished
+    assert set(lectores) == {"Bastián", "Daniel"}
+    assert reh.summary()["absent"] == ["Bastián", "Daniel"]
+    assert Rehearsal(d, mode=TEAM, present=None).absent == []

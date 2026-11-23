@@ -43,7 +43,9 @@ data class SpeakerTotal(
     var kwHit: Int = 0, var kwTotal: Int = 0, var machine: Boolean = false, var turns: Int = 0,
 )
 
-class Rehearsal(val deck: Deck, val mode: String = TEAM, val profile: String? = null, val autoAdvance: Boolean = true) {
+class Rehearsal(val deck: Deck, val mode: String = TEAM, val profile: String? = null, val autoAdvance: Boolean = true,
+                /** Ensayo del equipo: quiénes están. Las partes de los que faltan las lee el teléfono (null = están todos). */
+                val present: Set<String>? = null) {
     val runs = deck.sections.map { SectionRun(it) }
     var idx = -1
         private set
@@ -61,7 +63,11 @@ class Rehearsal(val deck: Deck, val mode: String = TEAM, val profile: String? = 
     val nextRun: SectionRun? get() = runs.getOrNull(idx + 1)
 
     fun isMine(r: SectionRun) = profile != null && r.section.speaker == profile
-    fun machineReads(r: SectionRun) = mode == SOLO && profile != null && r.section.speaker != profile
+    fun machineReads(r: SectionRun) =
+        if (mode == SOLO) profile != null && r.section.speaker != profile
+        else present != null && r.section.speaker !in present
+
+    val absent: List<String> get() = if (mode != TEAM || present == null) emptyList() else deck.speakers.filter { it !in present }
 
     fun totalElapsed(now: Double? = null): Double {
         val s = t0 ?: return 0.0

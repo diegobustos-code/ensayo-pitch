@@ -50,9 +50,12 @@ class SectionRun:
 
 
 class Rehearsal:
-    def __init__(self, deck, mode: str = TEAM, profile: Optional[str] = None, auto_advance: bool = True):
+    def __init__(self, deck, mode: str = TEAM, profile: Optional[str] = None, auto_advance: bool = True,
+                 present: Optional[set] = None):
         self.deck = deck
         self.mode = mode
+        # ensayo del equipo: quiénes están; las partes de los que faltan las lee el PC (None = están todos)
+        self.present = set(present) if present is not None else None
         self.profile = profile            # None = todo el equipo
         self.auto_advance = auto_advance
         self.runs = [SectionRun(s) for s in deck.sections]
@@ -84,7 +87,15 @@ class Rehearsal:
         return self.profile is not None and run.section.speaker == self.profile
 
     def machine_reads(self, run) -> bool:
-        return self.mode == SOLO and self.profile is not None and run.section.speaker != self.profile
+        if self.mode == SOLO:
+            return self.profile is not None and run.section.speaker != self.profile
+        return self.present is not None and run.section.speaker not in self.present
+
+    @property
+    def absent(self):
+        if self.mode != TEAM or self.present is None:
+            return []
+        return [sp for sp in self.deck.speakers if sp not in self.present]
 
     def total_elapsed(self, now=None) -> float:
         if self.t0 is None:
@@ -228,7 +239,7 @@ class Rehearsal:
     def summary(self):
         v, t = self.verdict()
         return {
-            "mode": self.mode, "profile": self.profile, "deck": self.deck.path,
+            "mode": self.mode, "profile": self.profile, "deck": self.deck.path, "absent": self.absent,
             "total": round(t, 1), "target_total": self.deck.total_target, "verdict": v,
             "min_total": self.deck.min_total, "max_total": self.deck.max_total, "deck_name": self.deck.name,
             "speakers": [{**d, "real": round(d["real"], 1), "voiced": round(d["voiced"], 1)} for d in self.per_speaker()],

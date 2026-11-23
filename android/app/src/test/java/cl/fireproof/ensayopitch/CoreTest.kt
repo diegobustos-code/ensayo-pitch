@@ -165,3 +165,23 @@ class SlideContentTest {
         assertFalse(SlideImages.isPdf(f.readBytes()))
     }
 }
+
+class AusentesTest {
+    @Test fun elTelefonoLeeALosQueFaltan() {
+        val f = listOf("../../ensayo/assets/default.pptx", "../ensayo/assets/default.pptx").map { File(it) }.first { it.exists() }
+        val d = DeckParser.load(f.readBytes(), "t", true, { null }, Curated.KEYWORDS)
+        val r = Rehearsal(d, TEAM, null, true, d.speakers.toSet() - setOf("Bastián", "Daniel"))
+        r.start(0.0)
+        val leidos = mutableSetOf<String>()
+        var t = 0.0
+        while (!r.finished) {
+            val cur = r.current!!
+            if (cur.byMachine) leidos.add(cur.section.speaker)
+            t += cur.section.targetS
+            r.advance(t)
+        }
+        assertEquals(setOf("Bastián", "Daniel"), leidos)
+        assertEquals(listOf("Bastián", "Daniel"), r.absent)
+        assertTrue(Rehearsal(d, TEAM).absent.isEmpty())
+    }
+}

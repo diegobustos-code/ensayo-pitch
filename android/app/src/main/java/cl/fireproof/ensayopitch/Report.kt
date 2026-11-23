@@ -53,6 +53,7 @@ object Report {
         val o = JSONObject()
         o.put("date", SimpleDateFormat("yyyy-MM-dd HH:mm", Locale.US).format(Date()))
         o.put("mode", reh.mode)
+        o.put("absent", JSONArray(reh.absent))
         o.put("profile", reh.profile ?: JSONObject.NULL)
         o.put("total", reh.totalElapsed())
         o.put("target_total", reh.deck.totalTarget)
@@ -97,7 +98,8 @@ object Report {
             else -> "Se pasaron del tiempo" to "#b23a2a"
         }
         val prof = reh.profile
-        val mode = if (reh.mode == SOLO) "Ensayo individual" else "Ensayo del equipo"
+        val mode = (if (reh.mode == SOLO) "Ensayo individual" else "Ensayo del equipo") +
+            (if (reh.absent.isNotEmpty()) " (faltó ${reh.absent.joinToString(", ")}: sus partes las leyó el teléfono)" else "")
         val spRows = reh.perSpeaker().joinToString("") { d ->
             val mine = prof != null && d.speaker == prof
             "<tr class='${if (mine) "mine" else ""}'><td>${esc(d.speaker)}${if (mine) " (tú)" else ""}" +

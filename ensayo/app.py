@@ -15,7 +15,7 @@ from .deck import asset_dir, load_deck
 from .session import SOLO, TEAM, Rehearsal, diff_label, fmt
 
 APP_NAME = "Ensayo Pitch"
-APP_VERSION = "2.0"
+APP_VERSION = "2.1"
 TEAM_PROFILE = "__equipo__"
 
 PALETTE = ["#b5652b", "#3f6e8c", "#5b8a3c", "#8c4f7a", "#c29a2b", "#4f5d6b", "#a14a3b", "#2f7d73"]
@@ -297,6 +297,15 @@ class HomePage(QWidget):
         self.m_team.setChecked(True)
         self.m_team.toggled.connect(self._refresh_info)
         ml.addLayout(mrow)
+        # quiénes están (solo ensayo del equipo)
+        self.who_box = QWidget()
+        wl = QVBoxLayout(self.who_box)
+        wl.setContentsMargins(0, 6, 0, 0)
+        wl.addWidget(label("¿Quiénes están hoy? Desmarca a los que faltan: el PC lee sus partes.", bold=True))
+        self.who_grid = QGridLayout()
+        wl.addLayout(self.who_grid)
+        self.who_checks = {}
+        ml.addWidget(self.who_box)
         mid.addWidget(modes)
 
         opts = card()
@@ -378,6 +387,7 @@ class HomePage(QWidget):
     # perfiles
     def set_deck(self, deck, last_profile=None):
         self.deck = deck
+        self.build_who(deck, storage.settings().get("absent", []))
         src = "pitch del equipo" if deck.is_default else " + ".join(
             os.path.basename(x) for x in (deck.path, deck.guion) if x)
         self.deck_lbl.setText(f"{src} · {len(deck.sections)} partes · meta {fmt(deck.total_target)} "
@@ -409,6 +419,28 @@ class HomePage(QWidget):
         (chosen or self.prof_group.buttons()[-1]).setChecked(True)
         self._refresh_info()
 
+    def build_who(self, deck, absent=()):
+        while self.who_grid.count():
+            w = self.who_grid.takeAt(0).widget()
+            if w:
+                w.hide()
+                w.setParent(None)
+                w.deleteLater()
+        self.who_checks = {}
+        for i, sp in enumerate(deck.speakers):
+            cb = QCheckBox(sp)
+            cb.setChecked(sp not in absent)
+            cb.toggled.connect(self._refresh_info)
+            self.who_grid.addWidget(cb, i // 3, i % 3)
+            self.who_checks[sp] = cb
+
+    def present(self):
+        """None si están todos; si no, el conjunto de los que están."""
+        if self.mode() != TEAM:
+            return None
+        here = {sp for sp, cb in self.who_checks.items() if cb.isChecked()}
+        return None if len(here) == len(self.who_checks) else here
+
     def profile(self):
         b = self.prof_group.checkedButton()
         p = b.property("profile") if b else TEAM_PROFILE
@@ -421,6 +453,8 @@ class HomePage(QWidget):
         if not hasattr(self, "deck"):
             return
         p = self.profile()
+        self.who_box.setVisible(self.mode() == TEAM)
+        absent = set(self.who_checks) - (self.present() or set(self.who_checks))
         self.m_solo.setEnabled(p is not None)
         if p is None and self.m_solo.isChecked():
             self.m_team.setChecked(True)
@@ -428,7 +462,8 @@ class HomePage(QWidget):
             self.info_title.setText("Orden del pitch")
             rows = "".join(
                 f"<tr><td style='color:#776d63;padding-right:10px'>{s.slide_no}</td>"
-                f"<td style='color:{self.win.color_for(s.speaker)};font-weight:600;padding-right:10px'>{s.speaker}</td>"
+                f"<td style='color:{self.win.color_for(s.speaker)};font-weight:600;padding-right:10px'>{s.speaker}"
+                f"{' <span style=\"color:#9a9087;font-weight:400\">(lo lee el PC)</span>' if s.speaker in absent else ''}</td>"
                 f"<td style='padding-right:10px'>{s.target_s} s</td><td>{s.text[:80] + ('…' if len(s.text) > 80 else '')}</td></tr>" for s in self.deck.sections)
             self.info.setText(f"<table cellspacing=3>{rows}</table>")
         else:
@@ -633,7 +668,8 @@ class SessionPage(QWidget):
         self.who.setStyleSheet(f"font-size:26px;font-weight:700;color:{color}")
         self.slide_lbl.setText(f"Lámina {s.slide_no} · parte {s.index + 1} de {len(self.reh.runs)} · meta {s.target_s} s")
         if r.by_machine:
-            self.badge.setText("EL PC LEE ESTA PARTE · escucha y prepárate")
+            self.badge.setText(f"FALTA {s.speaker.upper()} · EL PC LEE SU PARTE" if self.reh.mode == TEAM
+                               else "EL PC LEE ESTA PARTE · escucha y prepárate")
             self.badge.setStyleSheet("background:#ebe5dc;border-radius:6px;padding:5px;font-weight:700")
         elif mine:
             self.badge.setText("TE TOCA")
@@ -843,12 +879,14 @@ class ReportPage(QWidget):
         self.big.setText(f"<span style='font-size:48px;font-weight:700;color:{verdict[1]}'>{fmt(summary['total'])}</span>"
                          f"&nbsp;&nbsp;<span style='font-size:18px'>{verdict[0]} (meta {fmt(summary['min_total'])}–{fmt(summary['max_total'])}){prev}</span>")
         mine = next((d for d in summary["speakers"] if d["speaker"] == prof), None)
+        falta = (" · faltó " + ", ".join(summary["absent"]) + " (lo leyó el PC)") if summary.get("absent") else ""
         if mine:
             self.sub.setText(f"Tus partes: <b>{fmt(mine['real'])}</b> de {fmt(mine['target'])} "
                              f"({diff_label(mine['real'], mine['target'])}) · puntos clave {mine['kw_hit']}/{mine['kw_total']}"
-                             f" · informe guardado en Documentos\\EnsayoPitch\\Informes")
+                             f"{falta} · informe guardado en Documentos\\EnsayoPitch\\Informes")
         else:
-            self.sub.setText("Informe guardado en Documentos\\EnsayoPitch\\Informes")
+            self.sub.setText(("Faltó " + ", ".join(summary["absent"]) + " (lo leyó el PC) · " if summary.get("absent") else "")
+                             + "Informe guardado en Documentos\\EnsayoPitch\\Informes")
         sp = summary["speakers"]
         self.table.setRowCount(len(sp))
         for i, d in enumerate(sp):
@@ -1061,7 +1099,10 @@ class MainWindow(QMainWindow):
                               show_script=self.home.show_script.isChecked(), voice=self.home.voice.currentIndex(),
                               rate=self.home.rate.value())
         self.settings = storage.settings()
-        reh = Rehearsal(self.deck, mode=self.home.mode(), profile=prof, auto_advance=self.home.auto.isChecked())
+        present = self.home.present()
+        storage.save_settings(absent=sorted(set(self.deck.speakers) - present) if present is not None else [])
+        reh = Rehearsal(self.deck, mode=self.home.mode(), profile=prof, auto_advance=self.home.auto.isChecked(),
+                        present=present)
         self.stack.setCurrentWidget(self.sess)
         self.sess.setFocus()
         self.sess.begin(reh, self.home.show_script.isChecked())

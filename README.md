@@ -30,6 +30,7 @@ Las versiones nuevas se instalan encima de la anterior y no se pierde el histori
 **2. Elige cómo ensayar.**
 
 - **Ensayo del equipo:** todos hablan frente al mismo PC. El reloj no se detiene en ningún momento; cada segundo se le carga a quien está en pantalla, así que al final queda el tiempo real de cada uno.
+- **¿Falta alguien?** (desde la 2.1) En el ensayo del equipo aparece «¿Quiénes están hoy?». Desmarca a los que no vinieron y el PC o el teléfono lee sus partes, para que el ensayo siga completo.
 - **Ensayo individual:** tú dices tus partes y el PC lee las de los demás con voz de Windows. Sirve para practicar solo y acostumbrarte a entrar justo cuando te toca.
 
 **3. Habla.** La app pasa sola a la siguiente parte cuando reconoce la frase final del turno. Si improvisas o el PC no te entiende, usa el teclado:

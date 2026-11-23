@@ -39,6 +39,8 @@ def write_report(summary: dict, outdir: str) -> str:
     vtxt, vcol = VERDICT[summary["verdict"]]
     prof = summary.get("profile")
     mode = "Ensayo individual" if summary["mode"] == "solo" else "Ensayo del equipo"
+    if summary.get("absent"):
+        mode += " (faltó " + ", ".join(summary["absent"]) + ": sus partes las leyó el PC)"
     esc = html.escape
 
     sp_rows = []
