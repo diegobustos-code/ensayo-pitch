@@ -186,3 +186,9 @@ def test_equipo_con_ausentes():
     assert set(lectores) == {"Bastián", "Daniel"}
     assert reh.summary()["absent"] == ["Bastián", "Daniel"]
     assert Rehearsal(d, mode=TEAM, present=None).absent == []
+
+
+def test_la_app_se_puede_importar():
+    # atrapa errores de sintaxis que solo aparecen en la versión de Python con que se arma el .exe
+    import importlib
+    importlib.import_module("ensayo.app")

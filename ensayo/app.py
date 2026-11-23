@@ -16,6 +16,7 @@ from .session import SOLO, TEAM, Rehearsal, diff_label, fmt
 
 APP_NAME = "Ensayo Pitch"
 APP_VERSION = "2.1"
+PC_TAG = " <span style='color:#9a9087;font-weight:400'>(lo lee el PC)</span>"
 TEAM_PROFILE = "__equipo__"
 
 PALETTE = ["#b5652b", "#3f6e8c", "#5b8a3c", "#8c4f7a", "#c29a2b", "#4f5d6b", "#a14a3b", "#2f7d73"]
@@ -463,7 +464,7 @@ class HomePage(QWidget):
             rows = "".join(
                 f"<tr><td style='color:#776d63;padding-right:10px'>{s.slide_no}</td>"
                 f"<td style='color:{self.win.color_for(s.speaker)};font-weight:600;padding-right:10px'>{s.speaker}"
-                f"{' <span style=\"color:#9a9087;font-weight:400\">(lo lee el PC)</span>' if s.speaker in absent else ''}</td>"
+                f"{PC_TAG if s.speaker in absent else ''}</td>"
                 f"<td style='padding-right:10px'>{s.target_s} s</td><td>{s.text[:80] + ('…' if len(s.text) > 80 else '')}</td></tr>" for s in self.deck.sections)
             self.info.setText(f"<table cellspacing=3>{rows}</table>")
         else:
